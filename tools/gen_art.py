@@ -37,9 +37,9 @@ PANEL = 240          # panel resolution (model.SIZE)
 SCLERA_SIZE = 320    # sclera source canvas
 SS = 2               # supersample factor for anti-aliased art
 
-THEME_NAMES = ("human", "demon", "ghost", "doomguy", "vampire", "zombie",
+THEME_NAMES = ("human", "demon", "ghost", "angry", "vampire", "zombie",
                "cyber", "cat", "wisp", "werewolf", "possessed", "serpent",
-               "hal")
+               "hal", "doomguy", "southpark")
 
 # ---------------------------------------------------------------------------
 # math / noise helpers
@@ -212,6 +212,13 @@ def voronoi_cells(
 
 def to_u8(a: np.ndarray) -> np.ndarray:
     return (np.clip(a, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
+
+
+def px_upscale(a: np.ndarray, factor: int) -> np.ndarray:
+    """NEAREST-neighbor integer upscale of a (H, W[, C]) float array — for
+    pixel-art themes authored on a coarse grid. No interpolation, no
+    smoothing: every low-res pixel becomes a crisp factor x factor block."""
+    return a.repeat(factor, axis=0).repeat(factor, axis=1)
 
 
 def save_rgb(rgb01: np.ndarray, path: Path, final_size: int) -> None:
@@ -549,11 +556,12 @@ def ghost_theme_json() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# DOOMGUY
+# ANGRY (formerly "doomguy"; the art is a furious human eye, so it was
+# renamed — pixels unchanged, see SEED_NAMES for the preserved rng seed)
 # ---------------------------------------------------------------------------
 
 
-def gen_doomguy_sclera(rng: np.random.Generator) -> np.ndarray:
+def gen_angry_sclera(rng: np.random.Generator) -> np.ndarray:
     size = SCLERA_SIZE * SS
     r, theta = radial_grid(size)
     # battle-worn, slightly yellowed sclera
@@ -614,7 +622,7 @@ def gen_doomguy_sclera(rng: np.random.Generator) -> np.ndarray:
     return rgb
 
 
-def gen_doomguy_iris(rng: np.random.Generator, diam: int) -> tuple[np.ndarray, np.ndarray]:
+def gen_angry_iris(rng: np.random.Generator, diam: int) -> tuple[np.ndarray, np.ndarray]:
     size = diam * SS
     r, theta = radial_grid(size)
     # steel blue, cold and hard
@@ -641,7 +649,7 @@ def gen_doomguy_iris(rng: np.random.Generator, diam: int) -> tuple[np.ndarray, n
     return rgb, a
 
 
-def gen_doomguy_highlight(rng: np.random.Generator, size: int = 28) -> tuple[np.ndarray, np.ndarray]:
+def gen_angry_highlight(rng: np.random.Generator, size: int = 28) -> tuple[np.ndarray, np.ndarray]:
     s = size * SS
     c = (s - 1) / 2.0
     y, x = np.mgrid[0:s, 0:s].astype(np.float64)
@@ -653,9 +661,9 @@ def gen_doomguy_highlight(rng: np.random.Generator, size: int = 28) -> tuple[np.
     return rgb, np.clip(a, 0.0, 1.0)
 
 
-def doomguy_theme_json() -> dict:
+def angry_theme_json() -> dict:
     return {
-        "name": "doomguy",
+        "name": "angry",
         "background": [10, 4, 3],
         "layers": {"sclera": "sclera.png", "iris": "iris.png",
                    "highlight": "highlight.png"},
@@ -1505,6 +1513,170 @@ def hal_theme_json() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# DOOMGUY — 1993 status-bar pixel art. Every layer is authored on a coarse
+# grid and NEAREST-upscaled (px_upscale) so the panel shows crisp chunky
+# pixels; the 2x supersampling used by the painterly themes is deliberately
+# NOT applied here.
+# ---------------------------------------------------------------------------
+
+DOOM_GRID = 64  # sclera low-res grid; 64 * 5 = SCLERA_SIZE
+
+
+def gen_doomguy_sclera(rng: np.random.Generator) -> np.ndarray:
+    n = DOOM_GRID
+    r, _theta = radial_grid(n)
+    # dirty bone-white base: radial grime falloff + per-pixel value dither,
+    # snapped to a handful of shades like an indexed-color sprite
+    val = 1.0 - 0.30 * smoothstep(0.50, 1.05, r)
+    val += rng.uniform(-0.10, 0.10, (n, n))
+    val = np.clip(np.round(val * 6.0) / 6.0, 0.55, 1.0)
+    bone = np.array([0.94, 0.89, 0.74])
+    grime = np.array([0.47, 0.38, 0.26])
+    t = ((val - 0.55) / 0.45)[..., None]
+    rgb = grime + (bone - grime) * t
+    # chunky crimson veins: 1-2 px random walks crawling in from the sides
+    vein_cols = (np.array([0.55, 0.09, 0.07]), np.array([0.41, 0.05, 0.05]))
+    c = (n - 1) / 2.0
+    for _ in range(6):
+        side = 1 if rng.random() < 0.5 else -1
+        x = int(round(c + side * rng.uniform(0.72, 0.88) * (n / 2.0)))
+        y = int(round(c + rng.uniform(-0.35, 0.45) * (n / 2.0)))
+        for _step in range(int(rng.integers(7, 14))):
+            col = vein_cols[int(rng.random() < 0.35)]
+            rgb[y, x] = col
+            if rng.random() < 0.3:  # occasional 2-px-thick chunk
+                rgb[min(n - 1, y + 1), x] = col
+            if rng.random() < 0.75:
+                x -= side  # wander inward
+            y += int(rng.integers(-1, 2))
+            x = int(np.clip(x, 9, n - 10))
+            y = int(np.clip(y, 27, 50))
+    # blood-spatter pixel clusters along the lower edge
+    spat_cols = (np.array([0.47, 0.06, 0.05]), np.array([0.36, 0.04, 0.04]),
+                 np.array([0.25, 0.03, 0.03]))
+    for _ in range(9):
+        cx = int(rng.integers(10, n - 10))
+        cy = int(rng.integers(45, 55))
+        for _drop in range(int(rng.integers(3, 8))):
+            px = int(np.clip(cx + rng.integers(-2, 3), 0, n - 1))
+            py = int(np.clip(cy + rng.integers(-2, 3), 0, n - 1))
+            rgb[py, px] = spat_cols[int(rng.integers(0, 3))]
+        rgb[cy, cx] = spat_cols[0]
+    # THICK dark-brown angry brow: a band across the top whose bottom edge
+    # steps down toward the center (symmetric scowl notch; both eyes share
+    # the art). The top ~22% sits under the resting upper lid, so the band
+    # continues past it — the visible steps are what read as the scowl.
+    brow = np.array([0.16, 0.085, 0.045])
+    brow_dark = np.array([0.105, 0.055, 0.03])
+    brow_lit = np.array([0.235, 0.13, 0.06])
+    shadow = np.array([0.055, 0.028, 0.018])
+    dxc = np.abs(np.arange(n) - (n - 1) / 2.0)
+    bottom = np.select([dxc <= 4, dxc <= 10, dxc <= 16, dxc <= 22],
+                       [25, 22, 19, 17], default=15)
+    for x in range(n):
+        b = int(bottom[x])
+        dither = rng.random(b)[:, None] < 0.22
+        rgb[:b, x] = np.where(dither, brow_dark, brow)
+        rgb[b - 1, x] = brow_lit  # lit bevel row: makes each step pop
+        rgb[b, x] = shadow        # darkest 1-px shadow line under the brow
+    return px_upscale(rgb, SCLERA_SIZE // n)
+
+
+def gen_doomguy_iris(rng: np.random.Generator, diam: int) -> tuple[np.ndarray, np.ndarray]:
+    n = 24  # low-res grid; diam (120) / 24 = 5 px blocks
+    rr = radial_grid(n)[0] * (n / 2.0)  # radius in low-res pixels
+    # hazel/brown per-pixel shade dither
+    shades = np.array([
+        [0.67, 0.49, 0.19],   # light hazel
+        [0.54, 0.38, 0.14],   # mid brown
+        [0.41, 0.27, 0.10],   # dark brown
+        [0.52, 0.44, 0.16],   # olive fleck
+    ])
+    pick = rng.integers(0, 4, (n, n))
+    pick = np.where((rr > 7.5) & (pick == 0), 2, pick)   # outer zone darker
+    pick = np.where((rr < 6.5) & (pick == 2), 0, pick)   # inner zone lighter
+    rgb = shades[pick]
+    # dark ring: outer ~2 low-res pixels of the disc
+    rgb = np.where((rr >= 9.5)[..., None], np.array([0.15, 0.09, 0.05]), rgb)
+    # hard pixel-circle alpha — no anti-aliasing, chunky stepped edge
+    a = (rr <= 11.55).astype(np.float64)
+    return px_upscale(rgb, diam // n), px_upscale(a, diam // n)
+
+
+def gen_doomguy_highlight(rng: np.random.Generator, size: int = 10) -> tuple[np.ndarray, np.ndarray]:
+    # a single 2x2-low-res-pixel white glint (2 x 5 px blocks), fully opaque
+    rgb = np.ones((size, size, 3), dtype=np.float64) * np.array([0.98, 0.98, 0.95])
+    a = np.ones((size, size), dtype=np.float64)
+    return rgb, a
+
+
+# pixel art is authored at final size — generate_theme must not LANCZOS it
+gen_doomguy_highlight.scale = 1  # type: ignore[attr-defined]
+
+
+def doomguy_theme_json() -> dict:
+    return {
+        "name": "doomguy",
+        "background": [12, 8, 6],
+        "layers": {"sclera": "sclera.png", "iris": "iris.png",
+                   "highlight": "highlight.png"},
+        "pupil": {"shape": "round", "color": [10, 8, 7], "min_frac": 0.20,
+                  "max_frac": 0.35, "slit_width_frac": 0.14},
+        "iris_frac": 0.50,
+        "gaze_range_px": 52,
+        "sclera_parallax": 0.25,
+        "eyelids": {"color": [45, 24, 12], "style": "straight", "upper_bias": 0.7},
+        "motion": {"saccade_interval": [0.25, 1.2],
+                   "saccade_duration": [0.05, 0.11],
+                   "wander": 0.55, "crazy": 0.04,
+                   "blink_interval": [3.0, 8.0], "blink_speed": 1.4,
+                   "pupil_speed": 0.6, "drift": 0.0, "flicker": 0.0},
+    }
+
+
+# ---------------------------------------------------------------------------
+# SOUTHPARK — flat paper-cutout cartoon: pure white ball, beady black dot.
+# ---------------------------------------------------------------------------
+
+
+def gen_southpark_sclera(rng: np.random.Generator) -> np.ndarray:
+    # PURE flat white — no texture, no gradients; the renderer's round
+    # vignette alone gives the cutout its shape
+    return np.ones((SCLERA_SIZE, SCLERA_SIZE, 3), dtype=np.float64)
+
+
+def gen_southpark_iris(rng: np.random.Generator, diam: int) -> tuple[np.ndarray, np.ndarray]:
+    # solid-black hard-edged dot, anti-aliased only at the disc edge
+    half = diam / 2.0
+    rr = radial_grid(diam)[0] * half  # radius in pixels
+    rgb = np.zeros((diam, diam, 3), dtype=np.float64)
+    a = 1.0 - smoothstep(half - 1.6, half, rr)  # smooth ~1.5-px rim, flat core
+    return rgb, a
+
+
+def southpark_theme_json() -> dict:
+    return {
+        "name": "southpark",
+        "background": [20, 18, 14],
+        "layers": {"sclera": "sclera.png", "iris": "iris.png"},
+        "pupil": {"shape": "none", "color": [0, 0, 0], "min_frac": 0.2,
+                  "max_frac": 0.4, "slit_width_frac": 0.1},
+        # 0.1625 * 240 = 39 exactly, so the renderer bakes the dot 1:1
+        # (a non-integer product would trigger a LANCZOS resize at bake time)
+        "iris_frac": 0.1625,
+        "gaze_range_px": 75,
+        "sclera_parallax": 0.0,
+        "eyelids": {"color": [252, 216, 168], "style": "curved",
+                    "upper_bias": 0.55},
+        "motion": {"saccade_interval": [0.4, 2.0],
+                   "saccade_duration": [0.08, 0.15],
+                   "wander": 0.7, "crazy": 0.12,
+                   "blink_interval": [1.5, 5.0], "blink_speed": 1.2,
+                   "pupil_speed": 0.0, "drift": 0.0, "flicker": 0.0},
+    }
+
+
+# ---------------------------------------------------------------------------
 # theme assembly / validation / check renders
 # ---------------------------------------------------------------------------
 
@@ -1512,8 +1684,8 @@ GENERATORS = {
     "human": (gen_human_sclera, gen_human_iris, gen_human_highlight, human_theme_json),
     "demon": (gen_demon_sclera, gen_demon_iris, gen_demon_highlight, demon_theme_json),
     "ghost": (gen_ghost_sclera, gen_ghost_iris, gen_ghost_highlight, ghost_theme_json),
-    "doomguy": (gen_doomguy_sclera, gen_doomguy_iris, gen_doomguy_highlight,
-                doomguy_theme_json),
+    "angry": (gen_angry_sclera, gen_angry_iris, gen_angry_highlight,
+              angry_theme_json),
     "vampire": (gen_vampire_sclera, gen_vampire_iris, gen_vampire_highlight,
                 vampire_theme_json),
     "zombie": (gen_zombie_sclera, gen_zombie_iris, gen_zombie_highlight,
@@ -1529,7 +1701,17 @@ GENERATORS = {
     "serpent": (gen_serpent_sclera, gen_serpent_iris, gen_serpent_highlight,
                 serpent_theme_json),
     "hal": (gen_hal_sclera, gen_hal_iris, gen_hal_highlight, hal_theme_json),
+    "doomguy": (gen_doomguy_sclera, gen_doomguy_iris, gen_doomguy_highlight,
+                doomguy_theme_json),
+    "southpark": (gen_southpark_sclera, gen_southpark_iris, None,
+                  southpark_theme_json),
 }
+
+# theme_rng seeds derive from the theme name. "angry" is the old "doomguy"
+# theme renamed (the art reads as a furious human eye, not DOOM); keep
+# seeding its rng from the original name so every generated pixel stays
+# byte-identical across the rename.
+SEED_NAMES = {"angry": "doomguy"}
 
 SCHEMA_KEYS = {
     "": {"name", "background", "layers", "pupil", "iris_frac", "gaze_range_px",
@@ -1567,16 +1749,20 @@ def generate_theme(name: str, out_dir: Path) -> Path:
     tdir.mkdir(parents=True, exist_ok=True)
 
     iris_diam = math.ceil(spec["iris_frac"] * PANEL)
+    seed_name = SEED_NAMES.get(name, name)
 
     print(f"[{name}] sclera {SCLERA_SIZE}x{SCLERA_SIZE} ...")
-    save_rgb(gen_sclera(theme_rng(name, "sclera")), tdir / "sclera.png", SCLERA_SIZE)
+    save_rgb(gen_sclera(theme_rng(seed_name, "sclera")), tdir / "sclera.png", SCLERA_SIZE)
     print(f"[{name}] iris {iris_diam}x{iris_diam} ...")
-    rgb, a = gen_iris(theme_rng(name, "iris"), iris_diam)
+    rgb, a = gen_iris(theme_rng(seed_name, "iris"), iris_diam)
     save_rgba(rgb, a, tdir / "iris.png", iris_diam)
     if gen_highlight is not None and "highlight" in spec["layers"]:
         print(f"[{name}] highlight ...")
-        rgb, a = gen_highlight(theme_rng(name, "highlight"))
-        save_rgba(rgb, a, tdir / "highlight.png", rgb.shape[0] // SS)
+        rgb, a = gen_highlight(theme_rng(seed_name, "highlight"))
+        # pixel-art generators (scale attribute = 1) author at final size;
+        # supersampled ones author at SS x and get a LANCZOS downscale
+        scale = getattr(gen_highlight, "scale", SS)
+        save_rgba(rgb, a, tdir / "highlight.png", rgb.shape[0] // scale)
     (tdir / "theme.json").write_text(json.dumps(spec, indent=2) + "\n")
     print(f"[{name}] wrote {tdir}/")
     return tdir

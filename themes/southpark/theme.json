@@ -1,0 +1,55 @@
+{
+  "name": "southpark",
+  "background": [
+    20,
+    18,
+    14
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.2,
+    "max_frac": 0.4,
+    "slit_width_frac": 0.1
+  },
+  "iris_frac": 0.1625,
+  "gaze_range_px": 75,
+  "sclera_parallax": 0.0,
+  "eyelids": {
+    "color": [
+      252,
+      216,
+      168
+    ],
+    "style": "curved",
+    "upper_bias": 0.55
+  },
+  "motion": {
+    "saccade_interval": [
+      0.4,
+      2.0
+    ],
+    "saccade_duration": [
+      0.08,
+      0.15
+    ],
+    "wander": 0.7,
+    "crazy": 0.12,
+    "blink_interval": [
+      1.5,
+      5.0
+    ],
+    "blink_speed": 1.2,
+    "pupil_speed": 0.0,
+    "drift": 0.0,
+    "flicker": 0.0
+  }
+}

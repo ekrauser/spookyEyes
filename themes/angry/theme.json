@@ -1,9 +1,9 @@
 {
-  "name": "doomguy",
+  "name": "angry",
   "background": [
-    12,
-    8,
-    6
+    10,
+    4,
+    3
   ],
   "layers": {
     "sclera": "sclera.png",
@@ -13,25 +13,25 @@
   "pupil": {
     "shape": "round",
     "color": [
-      10,
       8,
-      7
+      7,
+      8
     ],
-    "min_frac": 0.2,
+    "min_frac": 0.18,
     "max_frac": 0.35,
     "slit_width_frac": 0.14
   },
-  "iris_frac": 0.5,
+  "iris_frac": 0.6,
   "gaze_range_px": 52,
-  "sclera_parallax": 0.25,
+  "sclera_parallax": 0.35,
   "eyelids": {
     "color": [
-      45,
-      24,
+      50,
+      18,
       12
     ],
-    "style": "straight",
-    "upper_bias": 0.7
+    "style": "curved",
+    "upper_bias": 0.75
   },
   "motion": {
     "saccade_interval": [
