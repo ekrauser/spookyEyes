@@ -1,0 +1,55 @@
+{
+  "name": "bender",
+  "background": [
+    26,
+    28,
+    30
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png"
+  },
+  "pupil": {
+    "shape": "round",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.42,
+    "max_frac": 0.5,
+    "slit_width_frac": 0.15
+  },
+  "iris_frac": 0.725,
+  "gaze_range_px": 18,
+  "sclera_parallax": 0.0,
+  "eyelids": {
+    "color": [
+      150,
+      155,
+      160
+    ],
+    "style": "straight",
+    "upper_bias": 0.5
+  },
+  "motion": {
+    "saccade_interval": [
+      1.2,
+      4.5
+    ],
+    "saccade_duration": [
+      0.08,
+      0.2
+    ],
+    "wander": 0.45,
+    "crazy": 0.0,
+    "blink_interval": [
+      4.0,
+      9.0
+    ],
+    "blink_speed": 1.6,
+    "pupil_speed": 0.1,
+    "drift": 0.0,
+    "flicker": 0.0
+  }
+}

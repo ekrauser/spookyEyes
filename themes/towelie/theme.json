@@ -1,0 +1,55 @@
+{
+  "name": "towelie",
+  "background": [
+    20,
+    30,
+    34
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.3,
+    "max_frac": 0.3,
+    "slit_width_frac": 0.15
+  },
+  "iris_frac": 0.13,
+  "gaze_range_px": 44,
+  "sclera_parallax": 0.0,
+  "eyelids": {
+    "color": [
+      124,
+      178,
+      200
+    ],
+    "style": "straight",
+    "upper_bias": 0.85
+  },
+  "motion": {
+    "saccade_interval": [
+      2.5,
+      7.0
+    ],
+    "saccade_duration": [
+      0.5,
+      1.1
+    ],
+    "wander": 0.35,
+    "crazy": 0.35,
+    "blink_interval": [
+      5.0,
+      14.0
+    ],
+    "blink_speed": 0.4,
+    "pupil_speed": 0.0,
+    "drift": 0.3,
+    "flicker": 0.0
+  }
+}

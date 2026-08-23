@@ -1,0 +1,55 @@
+{
+  "name": "kenny",
+  "background": [
+    30,
+    16,
+    4
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.3,
+    "max_frac": 0.3,
+    "slit_width_frac": 0.15
+  },
+  "iris_frac": 0.1417,
+  "gaze_range_px": 28,
+  "sclera_parallax": 0.0,
+  "eyelids": {
+    "color": [
+      238,
+      130,
+      20
+    ],
+    "style": "curved",
+    "upper_bias": 0.5
+  },
+  "motion": {
+    "saccade_interval": [
+      0.5,
+      2.2
+    ],
+    "saccade_duration": [
+      0.08,
+      0.15
+    ],
+    "wander": 0.55,
+    "crazy": 0.1,
+    "blink_interval": [
+      2.0,
+      6.0
+    ],
+    "blink_speed": 1.2,
+    "pupil_speed": 0.0,
+    "drift": 0.0,
+    "flicker": 0.0
+  }
+}

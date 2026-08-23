@@ -1,0 +1,55 @@
+{
+  "name": "rick",
+  "background": [
+    18,
+    14,
+    12
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.3,
+    "max_frac": 0.3,
+    "slit_width_frac": 0.15
+  },
+  "iris_frac": 0.1,
+  "gaze_range_px": 78,
+  "sclera_parallax": 0.0,
+  "eyelids": {
+    "color": [
+      224,
+      205,
+      178
+    ],
+    "style": "curved",
+    "upper_bias": 0.6
+  },
+  "motion": {
+    "saccade_interval": [
+      0.3,
+      3.5
+    ],
+    "saccade_duration": [
+      0.05,
+      0.3
+    ],
+    "wander": 0.65,
+    "crazy": 0.2,
+    "blink_interval": [
+      3.0,
+      9.0
+    ],
+    "blink_speed": 0.8,
+    "pupil_speed": 0.0,
+    "drift": 0.15,
+    "flicker": 0.0
+  }
+}

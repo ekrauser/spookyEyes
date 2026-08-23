@@ -1,0 +1,55 @@
+{
+  "name": "anime",
+  "background": [
+    10,
+    8,
+    12
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.3,
+    "max_frac": 0.3,
+    "slit_width_frac": 0.15
+  },
+  "iris_frac": 0.8,
+  "gaze_range_px": 16,
+  "sclera_parallax": 0.0,
+  "eyelids": {
+    "color": [
+      16,
+      14,
+      18
+    ],
+    "style": "curved",
+    "upper_bias": 0.7
+  },
+  "motion": {
+    "saccade_interval": [
+      1.0,
+      3.5
+    ],
+    "saccade_duration": [
+      0.1,
+      0.25
+    ],
+    "wander": 0.5,
+    "crazy": 0.0,
+    "blink_interval": [
+      3.0,
+      8.0
+    ],
+    "blink_speed": 0.9,
+    "pupil_speed": 0.0,
+    "drift": 0.05,
+    "flicker": 0.0
+  }
+}

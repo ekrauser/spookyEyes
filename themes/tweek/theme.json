@@ -1,0 +1,55 @@
+{
+  "name": "tweek",
+  "background": [
+    24,
+    22,
+    18
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.3,
+    "max_frac": 0.3,
+    "slit_width_frac": 0.15
+  },
+  "iris_frac": 0.15,
+  "gaze_range_px": 70,
+  "sclera_parallax": 0.0,
+  "eyelids": {
+    "color": [
+      252,
+      216,
+      168
+    ],
+    "style": "curved",
+    "upper_bias": 0.55
+  },
+  "motion": {
+    "saccade_interval": [
+      0.1,
+      0.45
+    ],
+    "saccade_duration": [
+      0.03,
+      0.06
+    ],
+    "wander": 0.5,
+    "crazy": 0.25,
+    "blink_interval": [
+      0.8,
+      2.5
+    ],
+    "blink_speed": 2.0,
+    "pupil_speed": 0.0,
+    "drift": 0.0,
+    "flicker": 0.05
+  }
+}

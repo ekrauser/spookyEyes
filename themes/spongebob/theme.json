@@ -1,0 +1,56 @@
+{
+  "name": "spongebob",
+  "background": [
+    28,
+    26,
+    12
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "round",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.35,
+    "max_frac": 0.5,
+    "slit_width_frac": 0.15
+  },
+  "iris_frac": 0.55,
+  "gaze_range_px": 40,
+  "sclera_parallax": 0.0,
+  "eyelids": {
+    "color": [
+      255,
+      229,
+      63
+    ],
+    "style": "curved",
+    "upper_bias": 0.55
+  },
+  "motion": {
+    "saccade_interval": [
+      0.5,
+      2.0
+    ],
+    "saccade_duration": [
+      0.07,
+      0.14
+    ],
+    "wander": 0.6,
+    "crazy": 0.05,
+    "blink_interval": [
+      2.0,
+      6.0
+    ],
+    "blink_speed": 1.2,
+    "pupil_speed": 0.4,
+    "drift": 0.0,
+    "flicker": 0.0
+  }
+}
