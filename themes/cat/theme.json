@@ -1,0 +1,56 @@
+{
+  "name": "cat",
+  "background": [
+    4,
+    3,
+    2
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "slit",
+    "color": [
+      4,
+      5,
+      4
+    ],
+    "min_frac": 0.06,
+    "max_frac": 0.85,
+    "slit_width_frac": 0.22
+  },
+  "iris_frac": 0.88,
+  "gaze_range_px": 30,
+  "sclera_parallax": 0.2,
+  "eyelids": {
+    "color": [
+      9,
+      7,
+      6
+    ],
+    "style": "curved",
+    "upper_bias": 0.6
+  },
+  "motion": {
+    "saccade_interval": [
+      1.2,
+      6.0
+    ],
+    "saccade_duration": [
+      0.06,
+      0.12
+    ],
+    "wander": 0.4,
+    "crazy": 0.03,
+    "blink_interval": [
+      7.0,
+      20.0
+    ],
+    "blink_speed": 0.5,
+    "pupil_speed": 0.7,
+    "drift": 0.0,
+    "flicker": 0.0
+  }
+}

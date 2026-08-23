@@ -1,0 +1,56 @@
+{
+  "name": "zombie",
+  "background": [
+    8,
+    10,
+    6
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "round",
+    "color": [
+      42,
+      46,
+      42
+    ],
+    "min_frac": 0.3,
+    "max_frac": 0.45,
+    "slit_width_frac": 0.14
+  },
+  "iris_frac": 0.6,
+  "gaze_range_px": 50,
+  "sclera_parallax": 0.32,
+  "eyelids": {
+    "color": [
+      44,
+      50,
+      38
+    ],
+    "style": "straight",
+    "upper_bias": 0.5
+  },
+  "motion": {
+    "saccade_interval": [
+      2.5,
+      7.0
+    ],
+    "saccade_duration": [
+      0.6,
+      1.2
+    ],
+    "wander": 0.45,
+    "crazy": 0.6,
+    "blink_interval": [
+      6.0,
+      18.0
+    ],
+    "blink_speed": 0.35,
+    "pupil_speed": 0.1,
+    "drift": 0.3,
+    "flicker": 0.0
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "name": "vampire",
+  "background": [
+    5,
+    1,
+    2
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "round",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.15,
+    "max_frac": 0.5,
+    "slit_width_frac": 0.14
+  },
+  "iris_frac": 0.64,
+  "gaze_range_px": 50,
+  "sclera_parallax": 0.3,
+  "eyelids": {
+    "color": [
+      12,
+      3,
+      6
+    ],
+    "style": "curved",
+    "upper_bias": 0.65
+  },
+  "motion": {
+    "saccade_interval": [
+      2.0,
+      6.0
+    ],
+    "saccade_duration": [
+      0.25,
+      0.5
+    ],
+    "wander": 0.25,
+    "crazy": 0.0,
+    "blink_interval": [
+      8.0,
+      20.0
+    ],
+    "blink_speed": 0.7,
+    "pupil_speed": 0.3,
+    "drift": 0.05,
+    "flicker": 0.0
+  }
+}

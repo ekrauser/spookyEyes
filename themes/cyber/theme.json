@@ -1,0 +1,56 @@
+{
+  "name": "cyber",
+  "background": [
+    2,
+    4,
+    6
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "round",
+    "color": [
+      3,
+      6,
+      14
+    ],
+    "min_frac": 0.2,
+    "max_frac": 0.6,
+    "slit_width_frac": 0.14
+  },
+  "iris_frac": 0.68,
+  "gaze_range_px": 50,
+  "sclera_parallax": 0.3,
+  "eyelids": {
+    "color": [
+      5,
+      8,
+      14
+    ],
+    "style": "straight",
+    "upper_bias": 0.5
+  },
+  "motion": {
+    "saccade_interval": [
+      0.8,
+      2.5
+    ],
+    "saccade_duration": [
+      0.04,
+      0.06
+    ],
+    "wander": 0.4,
+    "crazy": 0.0,
+    "blink_interval": [
+      5.0,
+      12.0
+    ],
+    "blink_speed": 2.2,
+    "pupil_speed": 0.8,
+    "drift": 0.0,
+    "flicker": 0.1
+  }
+}

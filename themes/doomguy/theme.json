@@ -1,0 +1,56 @@
+{
+  "name": "doomguy",
+  "background": [
+    10,
+    4,
+    3
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "round",
+    "color": [
+      8,
+      7,
+      8
+    ],
+    "min_frac": 0.18,
+    "max_frac": 0.35,
+    "slit_width_frac": 0.14
+  },
+  "iris_frac": 0.6,
+  "gaze_range_px": 52,
+  "sclera_parallax": 0.35,
+  "eyelids": {
+    "color": [
+      50,
+      18,
+      12
+    ],
+    "style": "curved",
+    "upper_bias": 0.75
+  },
+  "motion": {
+    "saccade_interval": [
+      0.25,
+      1.2
+    ],
+    "saccade_duration": [
+      0.05,
+      0.11
+    ],
+    "wander": 0.55,
+    "crazy": 0.04,
+    "blink_interval": [
+      3.0,
+      8.0
+    ],
+    "blink_speed": 1.4,
+    "pupil_speed": 0.6,
+    "drift": 0.0,
+    "flicker": 0.0
+  }
+}
