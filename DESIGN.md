@@ -213,6 +213,12 @@ core_freq pinning, INVON/MADCTL tweaks, PIR-near-Pi false triggers).
 `layers.highlight` optional. Fractions are relative to iris diameter
 (`iris_frac` relative to 240). Motion keys map 1:1 to `model.MotionParams`.
 
+Optional top-level keys: `iris_spin_rpm` (float, revolutions/minute — the
+renderer pre-bakes SPIN_STEPS rotated iris sprites and indexes them by the
+app's animation clock; requires `pupil.shape` = `"none"`) and
+`iris_spin_mirror` (bool — the right eye counter-rotates). Used by the Arcana
+collection (`tools/gen_arcana.py`).
+
 ## Conventions
 
 - Python 3.11+, type hints everywhere, `from __future__ import annotations`.

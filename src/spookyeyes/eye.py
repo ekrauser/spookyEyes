@@ -21,6 +21,7 @@ logger = logging.getLogger("spookyeyes.eye")
 
 PUPIL_STEPS = 12          # pre-baked iris sprites across the dilation range
 LID_STEPS = 24            # pre-baked lid masks quantizing openness 0..1.25
+SPIN_STEPS = 36           # pre-baked rotation steps for spinning irises
 MAX_OPENNESS = 1.25       # startled-wide upper bound of EyeState.openness
 
 _LID_ARC_RADIUS = 260.0   # px; curvature of the "curved" eyelid edge arcs
@@ -39,7 +40,9 @@ class EyeRenderer:
     PUPIL_STEPS = PUPIL_STEPS
     LID_STEPS = LID_STEPS
 
-    def __init__(self, theme: Theme) -> None:
+    def __init__(self, theme: Theme, spin_dir: int = 1) -> None:
+        """``spin_dir=-1`` counter-rotates a spinning iris (the app passes it
+        for the right eye when the theme sets ``iris_spin_mirror``)."""
         self._theme = theme
         self._range = float(theme.gaze_range_px)
         self._parallax = float(theme.sclera_parallax)
@@ -55,6 +58,23 @@ class EyeRenderer:
         self._iris_sprites = self._bake_iris_sprites(theme)
         iris_d = self._iris_sprites[0].width
         self._iris_half = iris_d / 2.0
+
+        # Spinning iris: pre-bake SPIN_STEPS rotated copies of the composed
+        # sprite (the loader guarantees pupil shape "none", so all pupil steps
+        # are identical and one rotation set suffices). render() then just
+        # indexes by time — no per-frame rotation.
+        self._spin_sprites: list[Image.Image] | None = None
+        self._spin_rate = 0.0
+        rpm = float(getattr(theme, "iris_spin_rpm", 0.0))
+        if rpm:
+            base_sprite = self._iris_sprites[0]
+            step_deg = 360.0 / SPIN_STEPS
+            self._spin_sprites = [
+                base_sprite.rotate(-step_deg * i, resample=Image.BICUBIC)
+                for i in range(SPIN_STEPS)
+            ]
+            direction = 1.0 if spin_dir >= 0 else -1.0
+            self._spin_rate = rpm / 60.0 * SPIN_STEPS * direction  # steps/s
 
         self._highlight = theme.highlight
         if self._highlight is not None:
@@ -161,8 +181,11 @@ class EyeRenderer:
 
     # ---------------------------------------------------------------- rendering
 
-    def render(self, state: EyeState) -> np.ndarray:
-        """Compose one frame; returns a (240, 240, 3) uint8 RGB array."""
+    def render(self, state: EyeState, t: float = 0.0) -> np.ndarray:
+        """Compose one frame; returns a (240, 240, 3) uint8 RGB array.
+
+        ``t`` is the animation clock in seconds (the app passes its running
+        frame time); it only affects themes with a spinning iris."""
         gaze_x = _clamp(state.gaze_x, -1.0, 1.0)
         gaze_y = _clamp(state.gaze_y, -1.0, 1.0)
         gpx = gaze_x * self._range
@@ -173,9 +196,13 @@ class EyeRenderer:
         oy = min(max(self._base_y - round(gpy * self._parallax), 0), self._max_y)
         frame = self._sclera.crop((ox, oy, ox + SIZE, oy + SIZE))
 
-        # 2. iris sprite for the quantized pupil dilation, centered at gaze
-        k = round(_clamp(state.pupil, 0.0, 1.0) * (PUPIL_STEPS - 1))
-        sprite = self._iris_sprites[k]
+        # 2. iris sprite — rotation step for spinning themes, else the
+        #    quantized pupil-dilation step — centered at gaze
+        if self._spin_sprites is not None:
+            sprite = self._spin_sprites[int(t * self._spin_rate) % SPIN_STEPS]
+        else:
+            k = round(_clamp(state.pupil, 0.0, 1.0) * (PUPIL_STEPS - 1))
+            sprite = self._iris_sprites[k]
         ix = round(self._center + gpx - self._iris_half)
         iy = round(self._center + gpy - self._iris_half)
         frame.paste(sprite, (ix, iy), sprite)

@@ -1,0 +1,57 @@
+{
+  "name": "portal",
+  "background": [
+    0,
+    0,
+    0
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.3,
+    "max_frac": 0.3,
+    "slit_width_frac": 0.15
+  },
+  "iris_frac": 0.92,
+  "gaze_range_px": 12,
+  "sclera_parallax": 0.1,
+  "eyelids": {
+    "color": [
+      12,
+      6,
+      18
+    ],
+    "style": "curved",
+    "upper_bias": 0.6
+  },
+  "motion": {
+    "saccade_interval": [
+      3.0,
+      8.0
+    ],
+    "saccade_duration": [
+      0.6,
+      1.2
+    ],
+    "wander": 0.2,
+    "crazy": 0.1,
+    "blink_interval": [
+      10.0,
+      25.0
+    ],
+    "blink_speed": 0.6,
+    "pupil_speed": 0.0,
+    "drift": 0.1,
+    "flicker": 0.06
+  },
+  "iris_spin_rpm": 3.0,
+  "iris_spin_mirror": true
+}

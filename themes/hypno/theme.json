@@ -1,0 +1,57 @@
+{
+  "name": "hypno",
+  "background": [
+    0,
+    0,
+    0
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.3,
+    "max_frac": 0.3,
+    "slit_width_frac": 0.15
+  },
+  "iris_frac": 0.95,
+  "gaze_range_px": 10,
+  "sclera_parallax": 0.0,
+  "eyelids": {
+    "color": [
+      10,
+      10,
+      10
+    ],
+    "style": "straight",
+    "upper_bias": 0.5
+  },
+  "motion": {
+    "saccade_interval": [
+      2.0,
+      6.0
+    ],
+    "saccade_duration": [
+      0.4,
+      0.8
+    ],
+    "wander": 0.15,
+    "crazy": 0.0,
+    "blink_interval": [
+      8.0,
+      18.0
+    ],
+    "blink_speed": 0.8,
+    "pupil_speed": 0.0,
+    "drift": 0.05,
+    "flicker": 0.0
+  },
+  "iris_spin_rpm": 10.0,
+  "iris_spin_mirror": true
+}

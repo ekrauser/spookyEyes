@@ -52,6 +52,10 @@ class Theme:
     lid_style: str               # "curved" | "straight"
     lid_upper_bias: float
     motion: MotionParams
+    # Iris rotation (the "Arcana" themes): revolutions per minute, and whether
+    # the right eye should counter-rotate. 0 = static (the default).
+    iris_spin_rpm: float = 0.0
+    iris_spin_mirror: bool = False
 
 
 def _num(value: object, key: str, name: str) -> float:
@@ -208,6 +212,14 @@ def load_theme(themes_dir: Path, name: str) -> Theme:
         lid_style=lid_style,
         lid_upper_bias=_num(eyelids.get("upper_bias", 0.6), "eyelids.upper_bias", name),
         motion=_parse_motion(_section(data, "motion", name), name),
+        iris_spin_rpm=_num(data.get("iris_spin_rpm", 0.0), "iris_spin_rpm", name),
+        iris_spin_mirror=bool(data.get("iris_spin_mirror", False)),
     )
+    if theme.iris_spin_rpm and theme.pupil_shape != "none":
+        raise ThemeError(
+            f'theme {name!r}: iris_spin_rpm requires pupil shape "none" '
+            f"(got {theme.pupil_shape!r}) — a dilating pupil cannot be pre-baked "
+            f"together with rotation"
+        )
     logger.info("loaded theme %r from %s", name, theme_dir)
     return theme

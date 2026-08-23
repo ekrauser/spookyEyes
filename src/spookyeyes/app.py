@@ -90,6 +90,13 @@ def _start_mqtt(
         return None
 
 
+def _make_renderers(theme: object) -> tuple[object, object]:
+    """Left and right renderers; the right eye counter-rotates spinning
+    irises when the theme asks for it (iris_spin_mirror)."""
+    right_dir = -1 if getattr(theme, "iris_spin_mirror", False) else 1
+    return eye_mod.EyeRenderer(theme), eye_mod.EyeRenderer(theme, spin_dir=right_dir)
+
+
 def _list_themes(themes_dir: Path) -> list[str]:
     """Names of all loadable themes on disk (for the HA discovery select)."""
     try:
@@ -172,8 +179,7 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
         return 1
     theme_name = cfg.theme.name
 
-    left_renderer = eye_mod.EyeRenderer(theme)
-    right_renderer = eye_mod.EyeRenderer(theme)
+    left_renderer, right_renderer = _make_renderers(theme)
     rng = random.Random(args.seed)  # Random(None) seeds from the OS
     engine = behavior_mod.BehaviorEngine(theme.motion, rng=rng)
 
@@ -273,8 +279,7 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
                         continue
                     theme = new_theme
                     theme_name = name
-                    left_renderer = eye_mod.EyeRenderer(theme)
-                    right_renderer = eye_mod.EyeRenderer(theme)
+                    left_renderer, right_renderer = _make_renderers(theme)
                     engine.set_motion(theme.motion)
                     log.info("switched to theme %r", theme_name)
                     _publish_state()
@@ -306,8 +311,9 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
                     last_pub_mode = mode_now
                     _publish_state()
 
-            left_frame = left_renderer.render(left_state)
-            right_frame = right_renderer.render(right_state)
+            t_anim = frames_done * dt  # deterministic animation clock (spin)
+            left_frame = left_renderer.render(left_state, t_anim)
+            right_frame = right_renderer.render(right_state, t_anim)
             if cfg.display.mirror_left:
                 left_frame = np.fliplr(left_frame)
             if cfg.display.mirror_right:
