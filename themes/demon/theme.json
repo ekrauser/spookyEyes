@@ -1,0 +1,56 @@
+{
+  "name": "demon",
+  "background": [
+    8,
+    0,
+    0
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "slit",
+    "color": [
+      2,
+      0,
+      0
+    ],
+    "min_frac": 0.2,
+    "max_frac": 0.75,
+    "slit_width_frac": 0.24
+  },
+  "iris_frac": 0.7,
+  "gaze_range_px": 55,
+  "sclera_parallax": 0.3,
+  "eyelids": {
+    "color": [
+      16,
+      2,
+      2
+    ],
+    "style": "curved",
+    "upper_bias": 0.5
+  },
+  "motion": {
+    "saccade_interval": [
+      0.25,
+      1.1
+    ],
+    "saccade_duration": [
+      0.05,
+      0.12
+    ],
+    "wander": 0.5,
+    "crazy": 0.15,
+    "blink_interval": [
+      1.5,
+      5.0
+    ],
+    "blink_speed": 1.7,
+    "pupil_speed": 0.9,
+    "drift": 0.0,
+    "flicker": 0.12
+  }
+}

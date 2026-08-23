@@ -1,0 +1,35 @@
+# spookyeyes configuration. Copy to config.toml and edit.
+# Every key is optional; values shown are the defaults.
+
+[display]
+output = "preview"        # "preview" (pygame window) | "fb" (Pi framebuffers) | "record" | "null"
+# Panels are named by stable SPI address (CE0 = spi0.0, CE1 = spi0.1) and
+# resolved to /dev/fbN at startup — fb numbers can swap between boots.
+# Plain "/dev/fb1"-style paths are also accepted. If left/right come out
+# swapped on the prop, just swap these two values.
+fb_left = "spi0.0"
+fb_right = "spi0.1"
+fps = 30
+mirror_left = false       # horizontal flip, for displays mounted mirrored
+mirror_right = false
+scale = 2                 # preview window scale
+record_dir = "out"
+
+[theme]
+name = "human"            # "human" | "demon" | "ghost"
+dir = "themes"
+
+[mqtt]
+enabled = false
+host = "homeassistant.local"
+port = 1883
+username = ""
+password = ""
+base_topic = "spookyeyes"
+discovery = true          # announce entities to Home Assistant via MQTT discovery
+client_id = "spookyeyes"
+
+[pir]
+enabled = false
+pin = 17                  # BCM pin with the PIR OUT signal
+cooldown = 10.0           # seconds between motion triggers

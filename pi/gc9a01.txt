@@ -1,0 +1,91 @@
+# GC9A01 / GC9A01A init sequence for the Linux panel-mipi-dbi driver.
+#
+# Format: notro/panel-mipi-dbi "mipi-dbi-cmd" text format —
+#   command 0xXX [param bytes...]     one MIPI DBI command + parameters
+#   delay N                           wait N milliseconds
+# Compile with mipi-dbi-cmd into /lib/firmware/gc9a01.bin (see build_firmware.sh).
+#
+# Sequence transcribed from carlfriess/GC9A01_demo GC9A01.c (GC9A01_init),
+# cross-checked against the working mipi-dbi-cmd file posted in
+# https://forums.raspberrypi.com/viewtopic.php?t=365153
+# Changes vs. the Arduino source:
+#   - the hardware reset toggle is omitted (the kernel driver resets the panel
+#     itself via reset-gpio before sending this blob)
+#   - COLMOD is 0x05 (16-bit RGB565) instead of 0x06 (18-bit) — fbdev is RGB565
+#
+# Most registers here are undocumented "vendor magic" from the panel maker's
+# reference code. Transcribe faithfully; do not "clean up".
+
+# --- Inter-register enable (unlocks the extended command set) ---
+command 0xEF                # Inter Register Enable 2
+command 0xEB 0x14           # vendor magic
+command 0xFE                # Inter Register Enable 1
+command 0xEF                # Inter Register Enable 2
+command 0xEB 0x14           # vendor magic (repeated, as in the reference code)
+
+# --- Undocumented vendor registers (power/timing trim) ---
+command 0x84 0x40
+command 0x85 0xFF
+command 0x86 0xFF
+command 0x87 0xFF
+command 0x88 0x0A
+command 0x89 0x21
+command 0x8A 0x00
+command 0x8B 0x80
+command 0x8C 0x01
+command 0x8D 0x01
+command 0x8E 0xFF
+command 0x8F 0xFF
+
+command 0xB6 0x00 0x00      # Display Function Control (source/gate scan config)
+
+# MADCTL — Memory Access Control. 0x48 = MX | BGR (carlfriess ORIENTATION 2,
+# upright with the ribbon cable at the bottom on common modules).
+# Rotated/mirrored image? Try 0x18, 0x28, 0x48 or 0x88, rebuild, reboot.
+command 0x36 0x48
+
+# COLMOD — pixel format: 0x05 = 16 bits/pixel (RGB565), what fbdev sends.
+command 0x3A 0x05
+
+command 0x90 0x08 0x08 0x08 0x08   # vendor magic
+command 0xBD 0x06                  # vendor magic
+command 0xBC 0x00                  # vendor magic
+command 0xFF 0x60 0x01 0x04        # vendor magic
+command 0xC3 0x13                  # Power Control 2 (VREG1A/B trim)
+command 0xC4 0x13                  # Power Control 3 (VREG2A/B trim)
+command 0xC9 0x22                  # Power Control 4
+command 0xBE 0x11                  # vendor magic
+command 0xE1 0x10 0x0E             # vendor magic
+command 0xDF 0x21 0x0C 0x02        # vendor magic
+
+# --- Gamma correction ---
+command 0xF0 0x45 0x09 0x08 0x08 0x26 0x2A   # SET_GAMMA1
+command 0xF1 0x43 0x70 0x72 0x36 0x37 0x6F   # SET_GAMMA2
+command 0xF2 0x45 0x09 0x08 0x08 0x26 0x2A   # SET_GAMMA3
+command 0xF3 0x43 0x70 0x72 0x36 0x37 0x6F   # SET_GAMMA4
+
+command 0xED 0x1B 0x0B             # vendor magic
+command 0xAE 0x77                  # vendor magic
+command 0xCD 0x63                  # vendor magic
+command 0x70 0x07 0x07 0x04 0x0E 0x0F 0x09 0x07 0x08 0x03   # vendor magic
+
+command 0xE8 0x34                  # Frame Rate control
+
+# --- Gate/source driver timing (vendor magic) ---
+command 0x62 0x18 0x0D 0x71 0xED 0x70 0x70 0x18 0x0F 0x71 0xEF 0x70 0x70
+command 0x63 0x18 0x11 0x71 0xF1 0x70 0x70 0x18 0x13 0x71 0xF3 0x70 0x70
+command 0x64 0x28 0x29 0xF1 0x01 0xF1 0x00 0x07
+command 0x66 0x3C 0x00 0xCD 0x67 0x45 0x45 0x10 0x00 0x00 0x00
+command 0x67 0x00 0x3C 0x00 0x00 0x00 0x01 0x54 0x10 0x32 0x98
+command 0x74 0x10 0x85 0x80 0x00 0x00 0x4E 0x00
+command 0x98 0x3E 0x07             # vendor magic
+
+command 0x35                       # TEON — Tearing Effect line on
+command 0x21                       # INVON — display inversion ON (required for
+                                   # correct colors on this panel; without it
+                                   # everything is negative)
+
+command 0x11                       # SLPOUT — exit sleep mode
+delay 120
+command 0x29                       # DISPON — display on
+delay 20

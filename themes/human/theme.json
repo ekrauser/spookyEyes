@@ -1,0 +1,56 @@
+{
+  "name": "human",
+  "background": [
+    10,
+    5,
+    5
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "round",
+    "color": [
+      8,
+      4,
+      4
+    ],
+    "min_frac": 0.22,
+    "max_frac": 0.55,
+    "slit_width_frac": 0.14
+  },
+  "iris_frac": 0.62,
+  "gaze_range_px": 52,
+  "sclera_parallax": 0.35,
+  "eyelids": {
+    "color": [
+      24,
+      12,
+      10
+    ],
+    "style": "curved",
+    "upper_bias": 0.6
+  },
+  "motion": {
+    "saccade_interval": [
+      0.8,
+      3.2
+    ],
+    "saccade_duration": [
+      0.09,
+      0.22
+    ],
+    "wander": 0.35,
+    "crazy": 0.05,
+    "blink_interval": [
+      2.5,
+      7.0
+    ],
+    "blink_speed": 1.0,
+    "pupil_speed": 0.5,
+    "drift": 0.0,
+    "flicker": 0.0
+  }
+}

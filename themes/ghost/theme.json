@@ -1,0 +1,56 @@
+{
+  "name": "ghost",
+  "background": [
+    2,
+    3,
+    6
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.15,
+    "max_frac": 0.3,
+    "slit_width_frac": 0.1
+  },
+  "iris_frac": 0.55,
+  "gaze_range_px": 45,
+  "sclera_parallax": 0.25,
+  "eyelids": {
+    "color": [
+      3,
+      5,
+      9
+    ],
+    "style": "straight",
+    "upper_bias": 0.5
+  },
+  "motion": {
+    "saccade_interval": [
+      3.0,
+      7.0
+    ],
+    "saccade_duration": [
+      0.8,
+      1.6
+    ],
+    "wander": 0.45,
+    "crazy": 0.05,
+    "blink_interval": [
+      15.0,
+      40.0
+    ],
+    "blink_speed": 0.5,
+    "pupil_speed": 0.2,
+    "drift": 0.6,
+    "flicker": 0.25
+  }
+}

@@ -1,0 +1,34 @@
+# spookyeyes — dual GC9A01 240x240 round displays via the panel-mipi-dbi driver.
+# Append this to /boot/firmware/config.txt on the Pi.
+#
+# IMPORTANT: remove/comment any plain `dtparam=spi=on` line — the mipi-dbi-spi
+# overlays enable SPI0 themselves, and a spidev claiming the bus prevents the
+# panel driver from binding (and costs you all the fps).
+#
+# Requires /lib/firmware/gc9a01.bin (build with pi/build_firmware.sh); the
+# `compatible=gc9a01\0...` below is what makes the driver load that file.
+
+# --- Left eye: SPI0 CE0 (GPIO8), DC=GPIO25, RST=GPIO27 → /dev/fb1 ---
+dtoverlay=mipi-dbi-spi,spi0-0,speed=40000000
+dtparam=compatible=gc9a01\0panel-mipi-dbi-spi
+dtparam=write-only
+dtparam=width=240,height=240
+dtparam=dc-gpio=25,reset-gpio=27
+
+# --- Right eye: SPI0 CE1 (GPIO7), DC=GPIO24, RST=GPIO23 → /dev/fb2 ---
+dtoverlay=mipi-dbi-spi,spi0-1,speed=40000000
+dtparam=compatible=gc9a01\0panel-mipi-dbi-spi
+dtparam=write-only
+dtparam=width=240,height=240
+dtparam=dc-gpio=24,reset-gpio=23
+
+# Glitches / tearing / white screen at 40 MHz (long jumper leads)? Fall back to
+# 32 MHz: replace `speed=40000000` with `speed=32000000` in BOTH dtoverlay
+# lines above, i.e.:
+# dtoverlay=mipi-dbi-spi,spi0-0,speed=32000000
+# dtoverlay=mipi-dbi-spi,spi0-1,speed=32000000
+
+# Optional: pin the core clock so the SPI clock doesn't wobble with governor
+# frequency scaling (helps marginal wiring):
+# core_freq=400
+# core_freq_min=400

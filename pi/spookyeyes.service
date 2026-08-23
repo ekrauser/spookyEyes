@@ -1,0 +1,20 @@
+# systemd unit template for spookyeyes. pi/install.sh fills in the user, repo
+# and venv paths and installs the result to /etc/systemd/system — this file is
+# not meant to be copied there by hand.
+
+[Unit]
+Description=Spooky Eyes — dual GC9A01 animated Halloween eyes
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__REPO__
+ExecStart=__VENV__/bin/spookyeyes --config __REPO__/config.toml --output fb
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
