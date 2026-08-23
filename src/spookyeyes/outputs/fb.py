@@ -7,11 +7,13 @@ device's line stride when it is wider than the panel.
 
 from __future__ import annotations
 
+import fcntl
 import logging
 import mmap
 import os
 import re
 import stat
+import struct
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +24,38 @@ log = logging.getLogger("spookyeyes.outputs.fb")
 
 _BYTES_PER_PX = 2  # RGB565
 _ROW_BYTES = SIZE * _BYTES_PER_PX
+
+_FBIOGET_VSCREENINFO = 0x4600
+_FBIOPUT_VSCREENINFO = 0x4601
+_FB_ACTIVATE_FORCE = 0x80
+_VSCREENINFO_LEN = 160  # sizeof(struct fb_var_screeninfo)
+_ACTIVATE_OFFSET = 84   # offsetof(struct fb_var_screeninfo, activate)
+
+
+def _force_modeset(fd: int, path: str) -> None:
+    """Enable the DRM pipeline behind a fbdev node.
+
+    On headless boots fbcon may never take over the panel's framebuffer, so
+    the CRTC stays disabled (enable=0 in debugfs) and mmap/write data lands in
+    a shadow buffer that is never flushed to the panel. A GET/PUT
+    round-trip of fb_var_screeninfo with FB_ACTIVATE_FORCE triggers
+    fb_set_par -> drm_fb_helper restore, which commits a mode-set and
+    presents the current buffer.
+    """
+    try:
+        buf = bytearray(_VSCREENINFO_LEN)
+        fcntl.ioctl(fd, _FBIOGET_VSCREENINFO, buf)
+        buf[_ACTIVATE_OFFSET : _ACTIVATE_OFFSET + 4] = struct.pack(
+            "I", _FB_ACTIVATE_FORCE
+        )
+        fcntl.ioctl(fd, _FBIOPUT_VSCREENINFO, buf)
+    except OSError as e:
+        log.warning(
+            "could not force a mode-set on %s (%s) — if the panel stays "
+            "frozen, its DRM pipeline is disabled",
+            path,
+            e,
+        )
 
 
 def to_rgb565(frame: np.ndarray) -> np.ndarray:
@@ -154,6 +188,8 @@ class FramebufferOutput:
         fd = os.open(path, os.O_RDWR)
         self._fds.append(fd)
         st = os.fstat(fd)
+        if stat.S_ISCHR(st.st_mode):
+            _force_modeset(fd, path)
         if stat.S_ISREG(st.st_mode) and st.st_size < length:
             raise ValueError(
                 f"framebuffer {path} is too small: {st.st_size} bytes, but "

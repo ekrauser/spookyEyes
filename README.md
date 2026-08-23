@@ -282,6 +282,13 @@ mode: single
   removed instead). Red/blue swapped or image mirrored/rotated: change the
   MADCTL value (`command 0x36 0x48`) — try `0x18`, `0x28`, `0x48`, `0x88`.
   After any edit: `bash pi/build_firmware.sh && sudo reboot`.
+- **Panels probe fine but stay frozen on old content** — the DRM pipeline
+  behind the fbdev is disabled (`enable=0` in
+  `/sys/kernel/debug/dri/*/state`): on headless boots fbcon never takes over
+  these framebuffers, so nothing performs the initial mode-set. The app and
+  `pi/test_pattern.py` force one automatically on open
+  (FBIOPUT_VSCREENINFO + FB_ACTIVATE_FORCE); if you write to `/dev/fbN` with
+  other tools, they must do the same.
 - **Glitches / tearing / random pixels** — Drop SPI to 32 MHz (commented
   fallback in `pi/config.txt.snippet`, change **both** stanzas), pin the core
   clock (`core_freq=400` + `core_freq_min=400`, also in the snippet), shorten

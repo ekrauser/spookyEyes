@@ -23,8 +23,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import os
 import re
+import stat
+import struct
 import sys
 
 import numpy as np
@@ -128,6 +131,19 @@ def fb_geometry(path: str) -> tuple[int, int, int]:
     return width, height, stride
 
 
+def force_modeset(fd: int) -> None:
+    """Enable the DRM pipeline behind the fbdev node.
+
+    On headless boots fbcon never takes over these framebuffers, so the CRTC
+    stays disabled and writes land in a shadow buffer that is never flushed to
+    the panel. FBIOPUT_VSCREENINFO with FB_ACTIVATE_FORCE commits a mode-set.
+    """
+    buf = bytearray(160)                 # struct fb_var_screeninfo
+    fcntl.ioctl(fd, 0x4600, buf)         # FBIOGET_VSCREENINFO
+    buf[84:88] = struct.pack("I", 0x80)  # activate = FB_ACTIVATE_FORCE
+    fcntl.ioctl(fd, 0x4601, buf)         # FBIOPUT_VSCREENINFO
+
+
 def write_fb(path: str, pattern: np.ndarray) -> None:
     """Write the pattern into the top-left of the framebuffer, stride-aware."""
     width, height, stride = fb_geometry(path)
@@ -137,6 +153,11 @@ def write_fb(path: str, pattern: np.ndarray) -> None:
     if (w, h) != (pix.shape[1], pix.shape[0]):
         print(f"  warning: {path} is only {width}x{height}, cropping pattern")
     with open(path, "rb+", buffering=0) as f:
+        if stat.S_ISCHR(os.fstat(f.fileno()).st_mode):
+            try:
+                force_modeset(f.fileno())
+            except OSError as exc:
+                print(f"  note: could not force a mode-set on {path}: {exc}")
         if w == pix.shape[1] and stride == w * 2 and h == pix.shape[0]:
             f.write(pix.tobytes())  # contiguous fast path
         else:
