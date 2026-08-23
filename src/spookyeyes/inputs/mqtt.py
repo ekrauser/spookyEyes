@@ -43,6 +43,7 @@ class MqttInput:
         self._client_factory = client_factory or self._default_client_factory
         self._client: Any | None = None
         self._theme_options = list(theme_options) if theme_options else list(THEME_OPTIONS)
+        self._connect_failed_logged = False
         # Optional callback returning (theme, mode, brightness); when set, the
         # current state is (re)published on every connect so retained state
         # topics reflect reality after restarts and broker reconnects.
@@ -82,6 +83,7 @@ class MqttInput:
         client.will_set(self.availability_topic, "offline", qos=0, retain=True)
         client.reconnect_delay_set(min_delay=1, max_delay=30)
         client.on_connect = self._on_connect
+        client.on_connect_fail = self._on_connect_fail
         client.on_message = self._on_message
         client.connect_async(cfg.host, cfg.port, keepalive=60)
         client.loop_start()
@@ -123,6 +125,7 @@ class MqttInput:
                 log.warning("mqtt: connection refused: %s", reason_code)
                 return
             log.info("mqtt: connected")
+            self._connect_failed_logged = False
             # (Re)subscribe on every connect: a reconnect with a clean session
             # loses server-side subscriptions.
             for topic in self._cmd_handlers:
@@ -136,6 +139,20 @@ class MqttInput:
                 self.publish_state(theme, mode, brightness)
         except Exception:
             log.exception("mqtt: error in on_connect")
+
+    def _on_connect_fail(self, client: Any, userdata: Any) -> None:
+        # paho retries quietly forever; without this, an unreachable broker
+        # (bad host, DNS failure, firewall) is invisible in the logs.
+        if not self._connect_failed_logged:
+            self._connect_failed_logged = True
+            log.warning(
+                "mqtt: cannot reach broker at %s:%d (DNS/route/refused?) — "
+                "still retrying in the background",
+                self._cfg.host,
+                self._cfg.port,
+            )
+        else:
+            log.debug("mqtt: broker still unreachable, retrying")
 
     def _on_message(self, client: Any, userdata: Any, message: Any) -> None:
         try:
