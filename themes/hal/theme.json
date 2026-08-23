@@ -1,0 +1,56 @@
+{
+  "name": "hal",
+  "background": [
+    2,
+    0,
+    0
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "round",
+    "color": [
+      26,
+      3,
+      2
+    ],
+    "min_frac": 0.12,
+    "max_frac": 0.3,
+    "slit_width_frac": 0.14
+  },
+  "iris_frac": 0.6,
+  "gaze_range_px": 15,
+  "sclera_parallax": 0.3,
+  "eyelids": {
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "style": "straight",
+    "upper_bias": 0.5
+  },
+  "motion": {
+    "saccade_interval": [
+      4.0,
+      10.0
+    ],
+    "saccade_duration": [
+      0.5,
+      1.0
+    ],
+    "wander": 0.05,
+    "crazy": 0.0,
+    "blink_interval": [
+      90.0,
+      180.0
+    ],
+    "blink_speed": 1.0,
+    "pupil_speed": 0.4,
+    "drift": 0.02,
+    "flicker": 0.04
+  }
+}

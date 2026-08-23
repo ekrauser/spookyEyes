@@ -1,0 +1,56 @@
+{
+  "name": "serpent",
+  "background": [
+    8,
+    6,
+    2
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "slit",
+    "color": [
+      4,
+      6,
+      3
+    ],
+    "min_frac": 0.1,
+    "max_frac": 0.5,
+    "slit_width_frac": 0.18
+  },
+  "iris_frac": 0.66,
+  "gaze_range_px": 48,
+  "sclera_parallax": 0.3,
+  "eyelids": {
+    "color": [
+      30,
+      26,
+      10
+    ],
+    "style": "straight",
+    "upper_bias": 0.4
+  },
+  "motion": {
+    "saccade_interval": [
+      3.0,
+      9.0
+    ],
+    "saccade_duration": [
+      0.4,
+      0.9
+    ],
+    "wander": 0.3,
+    "crazy": 0.0,
+    "blink_interval": [
+      45.0,
+      90.0
+    ],
+    "blink_speed": 0.5,
+    "pupil_speed": 0.2,
+    "drift": 0.1,
+    "flicker": 0.0
+  }
+}

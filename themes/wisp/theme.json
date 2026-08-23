@@ -1,0 +1,55 @@
+{
+  "name": "wisp",
+  "background": [
+    1,
+    1,
+    2
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.2,
+    "max_frac": 0.4,
+    "slit_width_frac": 0.1
+  },
+  "iris_frac": 0.28,
+  "gaze_range_px": 70,
+  "sclera_parallax": 0.15,
+  "eyelids": {
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "style": "straight",
+    "upper_bias": 0.5
+  },
+  "motion": {
+    "saccade_interval": [
+      2.0,
+      6.0
+    ],
+    "saccade_duration": [
+      0.8,
+      1.6
+    ],
+    "wander": 0.6,
+    "crazy": 0.3,
+    "blink_interval": [
+      60.0,
+      120.0
+    ],
+    "blink_speed": 1.0,
+    "pupil_speed": 0.0,
+    "drift": 0.7,
+    "flicker": 0.35
+  }
+}

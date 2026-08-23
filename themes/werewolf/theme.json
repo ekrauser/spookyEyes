@@ -1,0 +1,56 @@
+{
+  "name": "werewolf",
+  "background": [
+    10,
+    6,
+    3
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "round",
+    "color": [
+      10,
+      6,
+      4
+    ],
+    "min_frac": 0.15,
+    "max_frac": 0.55,
+    "slit_width_frac": 0.14
+  },
+  "iris_frac": 0.7,
+  "gaze_range_px": 52,
+  "sclera_parallax": 0.35,
+  "eyelids": {
+    "color": [
+      42,
+      24,
+      12
+    ],
+    "style": "curved",
+    "upper_bias": 0.7
+  },
+  "motion": {
+    "saccade_interval": [
+      0.3,
+      1.5
+    ],
+    "saccade_duration": [
+      0.05,
+      0.12
+    ],
+    "wander": 0.6,
+    "crazy": 0.1,
+    "blink_interval": [
+      4.0,
+      10.0
+    ],
+    "blink_speed": 1.3,
+    "pupil_speed": 0.7,
+    "drift": 0.0,
+    "flicker": 0.0
+  }
+}

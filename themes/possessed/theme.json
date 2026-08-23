@@ -1,0 +1,56 @@
+{
+  "name": "possessed",
+  "background": [
+    2,
+    2,
+    4
+  ],
+  "layers": {
+    "sclera": "sclera.png",
+    "iris": "iris.png",
+    "highlight": "highlight.png"
+  },
+  "pupil": {
+    "shape": "none",
+    "color": [
+      0,
+      0,
+      0
+    ],
+    "min_frac": 0.2,
+    "max_frac": 0.4,
+    "slit_width_frac": 0.1
+  },
+  "iris_frac": 0.6,
+  "gaze_range_px": 50,
+  "sclera_parallax": 0.3,
+  "eyelids": {
+    "color": [
+      22,
+      16,
+      24
+    ],
+    "style": "curved",
+    "upper_bias": 0.6
+  },
+  "motion": {
+    "saccade_interval": [
+      2.5,
+      8.0
+    ],
+    "saccade_duration": [
+      0.3,
+      0.6
+    ],
+    "wander": 0.3,
+    "crazy": 0.0,
+    "blink_interval": [
+      10.0,
+      25.0
+    ],
+    "blink_speed": 0.8,
+    "pupil_speed": 0.0,
+    "drift": 0.08,
+    "flicker": 0.0
+  }
+}
