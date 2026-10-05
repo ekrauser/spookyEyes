@@ -52,7 +52,10 @@ class Event:
                 visitor's right). Holds until the next look; "center" releases.
     "doorbell"  {"x": float} and/or {"y": float}: recalibrate the doorbell
                 preset (handled by the app: persists, re-aims, publishes)
-    "motion"    None (PIR edge; behavior decides whether to startle)
+    "mirror"    {"left": bool} and/or {"right": bool}: flip a panel
+                horizontally (app: applied per frame, persisted, published)
+    "default_theme"  theme name the eyes start in and HA returns to outside
+                Trick or Treat mode (app: persisted, published)
     "quit"      None (shut down cleanly)
     """
 

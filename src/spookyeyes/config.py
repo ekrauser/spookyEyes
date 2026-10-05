@@ -35,6 +35,10 @@ def _checked(section: str, key: str, value: object, default: object) -> object:
         if not isinstance(value, str):
             raise err
         return value
+    if isinstance(default, list):
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise ConfigError(f"[{section}] {key}: expected a list of strings, got {value!r}")
+        return list(value)
     return value
 
 
@@ -55,8 +59,11 @@ class DisplayConfig:
 
 @dataclass
 class ThemeConfig:
-    name: str = "human"
+    name: str = "human"           # startup theme unless a default was saved from HA
     dir: str = "themes"
+    # Themes offered in the Home Assistant Theme / Default Theme selects.
+    # Empty = every theme found in `dir`. Hidden themes still load if asked.
+    expose: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -79,17 +86,15 @@ class LookConfig:
     amplitude: float = 0.7        # how far left/right/up/down aim
     doorbell_x: float = 0.7       # default aim at the doorbell button
     doorbell_y: float = -0.3
-    # Values calibrated from Home Assistant (Doorbell X/Y sliders) are saved
-    # here and override doorbell_x/doorbell_y at startup. Relative paths are
-    # resolved against the config file's directory.
-    calibration_file: str = "look-calibration.json"
 
 
 @dataclass
-class PirConfig:
-    enabled: bool = False
-    pin: int = 17                 # BCM
-    cooldown: float = 10.0        # s between motion events forwarded to behavior
+class SettingsConfig:
+    """Values changed from Home Assistant at runtime (doorbell aim, mirror
+    switches, default theme) are saved here and override the config defaults
+    at startup. Relative paths resolve against the config file's directory."""
+
+    file: str = "settings.json"
 
 
 @dataclass
@@ -98,7 +103,7 @@ class AppConfig:
     theme: ThemeConfig = field(default_factory=ThemeConfig)
     mqtt: MqttConfig = field(default_factory=MqttConfig)
     look: LookConfig = field(default_factory=LookConfig)
-    pir: PirConfig = field(default_factory=PirConfig)
+    settings: SettingsConfig = field(default_factory=SettingsConfig)
 
     @classmethod
     def load(cls, path: str | Path | None) -> "AppConfig":

@@ -42,7 +42,7 @@ def test_determinism_same_seed_same_dts_same_events() -> None:
     events = {
         40: Event("mode", "stare"),
         110: Event("mode", Mode.IDLE),
-        170: Event("motion"),
+        170: Event("mode", "scare"),
         250: Event("blink"),
         300: Event("brightness", 0.5),
         380: Event("mode", "sleep"),
@@ -122,7 +122,7 @@ def test_scare_widens_lids_constricts_pupil_then_returns_to_idle() -> None:
     eng = make_engine(seed=11)
     for _ in range(50):  # settle in IDLE
         eng.step(0.02)
-    eng.handle(Event("motion"))
+    eng.handle(Event("mode", "scare"))
     assert eng.mode is Mode.SCARE
 
     dt = 0.02
@@ -145,11 +145,11 @@ def test_scare_widens_lids_constricts_pupil_then_returns_to_idle() -> None:
 
 def test_scare_retrigger_restarts_timer() -> None:
     eng = make_engine(seed=12)
-    eng.handle(Event("motion"))
+    eng.handle(Event("mode", "scare"))
     dt = 0.02
     for _ in range(int(4.0 / dt)):  # 4 s into the scare
         eng.step(dt)
-    eng.handle(Event("motion"))  # re-trigger: timer restarts at ~6 s
+    eng.handle(Event("mode", "scare"))  # re-trigger: timer restarts at ~6 s
     assert eng.mode is Mode.SCARE
     for _ in range(int(3.0 / dt)):  # t = 7 s > original 6 s deadline
         eng.step(dt)
@@ -161,23 +161,14 @@ def test_scare_retrigger_restarts_timer() -> None:
     assert eng.mode is Mode.IDLE
 
 
-def test_motion_enters_scare_from_idle_only() -> None:
-    eng = make_engine(seed=13)
-    assert eng.mode is Mode.IDLE
-    eng.handle(Event("motion"))
-    assert eng.mode is Mode.SCARE
-
-    asleep = make_engine(seed=13)
-    asleep.handle(Event("mode", "sleep"))
-    for _ in range(50):
-        asleep.step(0.02)
-    asleep.handle(Event("motion"))
-    assert asleep.mode is Mode.SLEEP, "motion must be ignored while sleeping"
-
-    staring = make_engine(seed=13)
-    staring.handle(Event("mode", "stare"))
-    staring.handle(Event("motion"))
-    assert staring.mode is Mode.STARE, "motion must be ignored while staring"
+def test_scare_command_works_from_any_mode() -> None:
+    for start in ("idle", "sleep", "stare"):
+        eng = make_engine(seed=13)
+        eng.handle(Event("mode", start))
+        for _ in range(50):
+            eng.step(0.02)
+        eng.handle(Event("mode", "scare"))
+        assert eng.mode is Mode.SCARE, f"scare command ignored from {start}"
 
 
 # --- STARE ---------------------------------------------------------------------

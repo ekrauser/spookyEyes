@@ -282,39 +282,141 @@ def test_main_publishes_look_state_and_scare_reset(theme_setup, tmp_path, monkey
     assert modes[-1] == "scare"
 
 
-def test_main_doorbell_calibration_persists_and_reloads(theme_setup, tmp_path) -> None:
-    """A doorbell calibration event aims at the new point, writes the sidecar
-    file next to config.toml, and a fresh start reads it back."""
+def _fake_broker(monkeypatch) -> list[tuple[str, object]]:
+    """Patch MqttInput to a recording fake client; returns the publish log."""
+    from spookyeyes.inputs import mqtt as mqtt_mod
+
+    published: list[tuple[str, object]] = []
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.on_connect = None
+            self.on_message = None
+
+        def username_pw_set(self, *a, **k): pass
+        def will_set(self, *a, **k): pass
+        def reconnect_delay_set(self, *a, **k): pass
+        def connect_async(self, *a, **k): pass
+        def loop_start(self): pass
+        def loop_stop(self): pass
+        def disconnect(self): pass
+        def subscribe(self, *a, **k): pass
+
+        def publish(self, topic, payload=None, qos=0, retain=False):
+            published.append((topic, payload))
+
+    monkeypatch.setattr(mqtt_mod.MqttInput, "_default_client_factory", lambda self: FakeClient())
+    return published
+
+
+def _run(config, events, frames=3):
     from spookyeyes import app
 
-    calib = theme_setup.parent / "look-calibration.json"
-    assert not calib.exists()
+    return app.main(
+        ["--config", str(config), "--output", "null", "--frames", str(frames), "--seed", "1", "--fps", "120"],
+        events=events,
+    )
+
+
+def _last(published, topic):
+    vals = [p for t, p in published if t == topic]
+    return vals[-1] if vals else None
+
+
+def test_main_settings_persist_and_reload(theme_setup, tmp_path, monkeypatch) -> None:
+    """Doorbell, mirror and default-theme events are applied, published, and
+    saved to settings.json next to config.toml; a fresh start reads them back."""
+    from spookyeyes import app
+
+    published = _fake_broker(monkeypatch)
+    settings = theme_setup.parent / "settings.json"
+    config = tmp_path / "config_mqtt.toml"
+    config.write_text(theme_setup.read_text() + "\n[mqtt]\nenabled = true\n")
 
     events: queue.Queue = queue.Queue()
     events.put(Event("doorbell", {"x": 0.55}))
     events.put(Event("doorbell", {"y": -0.15}))
-    rc = app.main(
-        ["--config", str(theme_setup), "--output", "null", "--frames", "3", "--seed", "1", "--fps", "120"],
-        events=events,
-    )
-    assert rc == 0
-    assert json.loads(calib.read_text()) == {"doorbell": {"x": 0.55, "y": -0.15}}
+    events.put(Event("mirror", {"left": True}))
+    events.put(Event("default_theme", "second"))
+    events.put(Event("default_theme", "no-such-theme"))  # ignored, state republished
+    assert _run(config, events) == 0
 
-    # second start: the saved value overrides the config default (0.7, -0.3)
-    from spookyeyes.config import AppConfig
+    saved = json.loads(settings.read_text())
+    assert saved["doorbell"] == {"x": 0.55, "y": -0.15}
+    assert saved["mirror_left"] is True and saved["mirror_right"] is False
+    assert saved["default_theme"] == "second"
+    assert _last(published, "spookyeyes/state/doorbell_x") == "0.55"
+    assert _last(published, "spookyeyes/state/mirror_left") == "ON"
+    assert _last(published, "spookyeyes/state/default_theme") == "second"
+    assert _last(published, "spookyeyes/state/theme") == "apptest"  # current theme untouched
 
-    cfg = AppConfig.load(str(theme_setup))
-    path = app._calibration_path(cfg, str(theme_setup))
-    assert path == calib
-    assert app._load_calibration(path, (0.7, -0.3)) == (0.55, -0.15)
+    # second start: saved default theme is the startup theme, settings republished
+    published.clear()
+    assert _run(config, queue.Queue()) == 0
+    assert _last(published, "spookyeyes/state/theme") == "second"
+    assert _last(published, "spookyeyes/state/default_theme") == "second"
+    assert _last(published, "spookyeyes/state/mirror_left") == "ON"
+    assert _last(published, "spookyeyes/state/doorbell_y") == "-0.15"
+
+    cfg = app.AppConfig.load(str(config))
+    assert app._settings_path(cfg, str(config)) == settings
 
 
-def test_load_calibration_falls_back_on_garbage(tmp_path) -> None:
+def test_main_cli_theme_overrides_saved_default(theme_setup, monkeypatch) -> None:
     from spookyeyes import app
 
-    p = tmp_path / "c.json"
-    assert app._load_calibration(p, (0.7, -0.3)) == (0.7, -0.3)  # missing
+    published = _fake_broker(monkeypatch)
+    (theme_setup.parent / "settings.json").write_text(json.dumps({"default_theme": "second"}))
+    config = theme_setup.parent / "config_mqtt.toml"
+    config.write_text(theme_setup.read_text() + "\n[mqtt]\nenabled = true\n")
+    rc = app.main(
+        ["--config", str(config), "--theme", "apptest", "--output", "null", "--frames", "2", "--fps", "120"],
+        events=queue.Queue(),
+    )
+    assert rc == 0
+    assert _last(published, "spookyeyes/state/theme") == "apptest"
+
+
+def test_main_saved_default_theme_missing_falls_back(theme_setup, monkeypatch) -> None:
+    published = _fake_broker(monkeypatch)
+    (theme_setup.parent / "settings.json").write_text(json.dumps({"default_theme": "gone"}))
+    config = theme_setup.parent / "config_mqtt.toml"
+    config.write_text(theme_setup.read_text() + "\n[mqtt]\nenabled = true\n")
+    assert _run(config, queue.Queue()) == 0
+    assert _last(published, "spookyeyes/state/theme") == "apptest"
+    assert _last(published, "spookyeyes/state/default_theme") == "apptest"
+
+
+def test_main_theme_expose_filters_discovery_options(theme_setup, monkeypatch) -> None:
+    published = _fake_broker(monkeypatch)
+    config = theme_setup.parent / "config_mqtt.toml"
+    config.write_text(
+        theme_setup.read_text()
+        + 'expose = ["second", "not-there"]\n'
+        + "\n[mqtt]\nenabled = true\n"
+    )
+    events: queue.Queue = queue.Queue()
+    events.put(Event("default_theme", "second"))   # exposed -> accepted
+    events.put(Event("default_theme", "apptest"))  # on disk but not exposed -> ignored
+    assert _run(config, events) == 0
+    assert _last(published, "spookyeyes/state/default_theme") == "second"
+    # Discovery options come from on_connect, which the fake never fires, so
+    # the option list itself is checked through the pure helper.
+    from spookyeyes import app
+
+    assert app._exposed_themes(["apptest", "second"], ["second", "not-there"]) == ["second"]
+    assert app._exposed_themes(["a", "b"], []) == ["a", "b"]
+
+
+def test_settings_bad_file_is_ignored(tmp_path) -> None:
+    from spookyeyes import app
+
+    p = tmp_path / "settings.json"
+    assert app._load_settings(p) == {}
     p.write_text("not json")
-    assert app._load_calibration(p, (0.7, -0.3)) == (0.7, -0.3)
-    p.write_text(json.dumps({"doorbell": {"x": 9, "y": -9}}))
-    assert app._load_calibration(p, (0.7, -0.3)) == (1.0, -1.0)  # clamped
+    assert app._load_settings(p) == {}
+    p.write_text("[1, 2]")
+    assert app._load_settings(p) == {}
+    assert app._settings_doorbell({"doorbell": {"x": 9, "y": -9}}, (0.7, -0.3)) == (1.0, -1.0)
+    assert app._settings_doorbell({"doorbell": "x"}, (0.7, -0.3)) == (0.7, -0.3)
+    assert app._settings_bool({"mirror_left": "yes"}, "mirror_left", False) is False

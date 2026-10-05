@@ -7,7 +7,6 @@ dependencies = ["numpy", "pillow"]
 
 [project.optional-dependencies]
 mqtt = ["paho-mqtt>=2.0"]
-pir = ["gpiozero"]
 preview = ["pygame"]
 dev = ["pytest"]
 

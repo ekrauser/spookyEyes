@@ -26,7 +26,7 @@ import numpy as np
 from spookyeyes import behavior as behavior_mod
 from spookyeyes import eye as eye_mod
 from spookyeyes import themes as themes_mod
-from spookyeyes.config import AppConfig, ConfigError, MqttConfig, PirConfig
+from spookyeyes.config import AppConfig, ConfigError, MqttConfig
 from spookyeyes.model import Event, Mode
 from spookyeyes.outputs import make_output
 
@@ -108,56 +108,62 @@ def _list_themes(themes_dir: Path) -> list[str]:
         return []
 
 
-def _calibration_path(cfg: AppConfig, config_path: str | None) -> Path:
-    p = Path(cfg.look.calibration_file)
+def _exposed_themes(on_disk: list[str], expose: list[str]) -> list[str]:
+    """Themes offered to HA: the `[theme] expose` allowlist in its own order,
+    minus names not found on disk (warned), or everything when it is empty."""
+    if not expose:
+        return list(on_disk)
+    missing = [t for t in expose if t not in on_disk]
+    if missing:
+        log.warning("[theme] expose lists themes not on disk, skipped: %s", ", ".join(missing))
+    return [t for t in expose if t in on_disk]
+
+
+def _settings_path(cfg: AppConfig, config_path: str | None) -> Path:
+    p = Path(cfg.settings.file)
     if not p.is_absolute() and config_path:
         p = Path(config_path).resolve().parent / p
     return p
 
 
-def _load_calibration(path: Path, default: tuple[float, float]) -> tuple[float, float]:
-    """Doorbell (x, y) saved from HA, falling back to the config defaults."""
+def _load_settings(path: Path) -> dict:
+    """Runtime settings saved from HA; an unreadable file is a warning."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        d = data["doorbell"]
-        x, y = float(d["x"]), float(d["y"])
     except FileNotFoundError:
-        return default
-    except (OSError, ValueError, TypeError, KeyError) as e:
-        log.warning("ignoring unreadable calibration file %s: %s", path, e)
-        return default
-    return (min(1.0, max(-1.0, x)), min(1.0, max(-1.0, y)))
+        return {}
+    except (OSError, ValueError) as e:
+        log.warning("ignoring unreadable settings file %s: %s", path, e)
+        return {}
+    if not isinstance(data, dict):
+        log.warning("ignoring settings file %s: not a JSON object", path)
+        return {}
+    return data
 
 
-def _save_calibration(path: Path, doorbell: tuple[float, float]) -> None:
+def _save_settings(path: Path, settings: dict) -> None:
     """Atomic write; a failure is logged, the live value still applies."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(
-            json.dumps({"doorbell": {"x": doorbell[0], "y": doorbell[1]}}, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        tmp.write_text(json.dumps(settings, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         tmp.replace(path)
     except OSError as e:
-        log.warning("cannot save calibration to %s: %s", path, e)
+        log.warning("cannot save settings to %s: %s", path, e)
 
 
-def _start_pir(cfg: PirConfig, events: queue.Queue[Event]) -> object | None:
-    """Start the PIR input if enabled. Missing gpiozero or a non-Pi host
-    (PirUnavailable) is a warning, never a crash."""
-    if not cfg.enabled:
-        return None
+def _settings_doorbell(settings: dict, default: tuple[float, float]) -> tuple[float, float]:
     try:
-        from spookyeyes.inputs.pir import PirInput
-    except ImportError as e:
-        log.warning("PIR enabled but gpiozero is not installed (%s); disabling", e)
-        return None
-    try:
-        return PirInput(cfg, events)
-    except Exception as e:  # PirUnavailable on non-Pi hosts, wiring errors, ...
-        log.warning("PIR input unavailable (%s); continuing without it", e)
-        return None
+        d = settings["doorbell"]
+        x, y = float(d["x"]), float(d["y"])
+    except (KeyError, TypeError, ValueError):
+        return default
+    return (min(1.0, max(-1.0, x)), min(1.0, max(-1.0, y)))
+
+
+def _settings_bool(settings: dict, key: str, default: bool) -> bool:
+    v = settings.get(key, default)
+    return v if isinstance(v, bool) else default
 
 
 def _stop_input(inp: object | None, label: str) -> None:
@@ -208,25 +214,56 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
         return 2
 
     themes_dir = Path(cfg.theme.dir)
+    on_disk = _list_themes(themes_dir)
+    exposed = _exposed_themes(on_disk, cfg.theme.expose)
+
+    # Runtime settings saved from Home Assistant override the config defaults.
+    settings_path = _settings_path(cfg, args.config)
+    settings = _load_settings(settings_path)
+    default_theme = str(settings.get("default_theme", cfg.theme.name))
+    if default_theme not in on_disk and on_disk:
+        log.warning("saved default theme %r not on disk, using %r", default_theme, cfg.theme.name)
+        default_theme = cfg.theme.name
+    mirror_left = _settings_bool(settings, "mirror_left", cfg.display.mirror_left)
+    mirror_right = _settings_bool(settings, "mirror_right", cfg.display.mirror_right)
+    doorbell = _settings_doorbell(settings, (cfg.look.doorbell_x, cfg.look.doorbell_y))
+
+    def _persist() -> None:
+        settings.update(
+            doorbell={"x": engine.preset("doorbell")[0], "y": engine.preset("doorbell")[1]},
+            mirror_left=mirror_left,
+            mirror_right=mirror_right,
+            default_theme=default_theme,
+        )
+        _save_settings(settings_path, settings)
+
+    # CLI --theme wins, then the saved default, then [theme] name.
+    theme_name = args.theme or default_theme
     try:
-        theme = themes_mod.load_theme(themes_dir, cfg.theme.name)
+        theme = themes_mod.load_theme(themes_dir, theme_name)
     except (themes_mod.ThemeError, OSError) as e:
-        log.error("cannot load theme %r from %s: %s", cfg.theme.name, themes_dir, e)
-        return 1
-    theme_name = cfg.theme.name
+        if theme_name != cfg.theme.name:
+            log.warning("cannot load theme %r (%s); falling back to %r",
+                        theme_name, e, cfg.theme.name)
+            theme_name = cfg.theme.name
+            try:
+                theme = themes_mod.load_theme(themes_dir, theme_name)
+            except (themes_mod.ThemeError, OSError) as e2:
+                log.error("cannot load theme %r from %s: %s", theme_name, themes_dir, e2)
+                return 1
+        else:
+            log.error("cannot load theme %r from %s: %s", theme_name, themes_dir, e)
+            return 1
 
     left_renderer, right_renderer = _make_renderers(theme)
     rng = random.Random(args.seed)  # Random(None) seeds from the OS
-    calib_path = _calibration_path(cfg, args.config)
-    doorbell = _load_calibration(calib_path, (cfg.look.doorbell_x, cfg.look.doorbell_y))
     presets = behavior_mod.look_presets(cfg.look.amplitude, doorbell)
     engine = behavior_mod.BehaviorEngine(theme.motion, rng=rng, presets=presets)
 
     if events is None:
         events = queue.Queue()
 
-    mqtt_input = _start_mqtt(cfg.mqtt, events, theme_options=_list_themes(themes_dir) or None)
-    pir_input = _start_pir(cfg.pir, events)
+    mqtt_input = _start_mqtt(cfg.mqtt, events, theme_options=exposed or None)
 
     brightness = 1.0
 
@@ -237,24 +274,29 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
     def _current_look() -> str:
         return str(getattr(engine, "look", "center"))
 
+    def _state() -> dict:
+        return {
+            "theme": theme_name,
+            "mode": _current_mode_str(),
+            "brightness": brightness,
+            "look": _current_look(),
+            "doorbell": engine.preset("doorbell"),
+            "mirror": (mirror_left, mirror_right),
+            "default_theme": default_theme,
+        }
+
     def _publish_state() -> None:
         if mqtt_input is None:
             return
         try:
-            mqtt_input.publish_state(
-                theme_name, _current_mode_str(), brightness, _current_look(),
-                engine.preset("doorbell"),
-            )
+            mqtt_input.publish_state(**_state())
         except Exception:
             log.warning("mqtt publish_state failed", exc_info=True)
 
     if mqtt_input is not None:
         # Republished on every (re)connect so retained state survives restarts,
-        # and after a rejected command so HA's selects snap back.
-        mqtt_input.state_provider = lambda: (
-            theme_name, _current_mode_str(), brightness, _current_look(),
-            engine.preset("doorbell"),
-        )
+        # and after a rejected command so HA's entities snap back.
+        mqtt_input.state_provider = _state
 
     output: Output | None = None
     old_handlers: dict[signal.Signals, object] = {}
@@ -282,12 +324,15 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
                     pass
 
         log.info(
-            "running: theme=%s output=%s fps=%d mirror=(%s, %s)",
+            "running: theme=%s (default %s) output=%s fps=%d mirror=(%s, %s) exposed=%d/%d themes",
             theme_name,
+            default_theme,
             cfg.display.output,
             fps,
-            cfg.display.mirror_left,
-            cfg.display.mirror_right,
+            mirror_left,
+            mirror_right,
+            len(exposed),
+            len(on_disk),
         )
 
         period = 1.0 / fps
@@ -344,8 +389,27 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
                     except (TypeError, ValueError, AttributeError) as e:
                         log.warning("ignoring bad doorbell calibration %r: %s", ev.value, e)
                         continue
-                    _save_calibration(calib_path, engine.preset("doorbell"))
+                    _persist()
                     log.info("doorbell preset calibrated to x=%.2f y=%.2f", *new_xy)
+                    _publish_state()
+                elif ev.kind == "mirror":
+                    upd = ev.value if isinstance(ev.value, dict) else {}
+                    if "left" in upd:
+                        mirror_left = bool(upd["left"])
+                    if "right" in upd:
+                        mirror_right = bool(upd["right"])
+                    _persist()
+                    log.info("mirror set to left=%s right=%s", mirror_left, mirror_right)
+                    _publish_state()
+                elif ev.kind == "default_theme":
+                    name = str(ev.value)
+                    if name not in (exposed or on_disk):
+                        log.warning("default theme %r is not an exposed theme, ignored", name)
+                        _publish_state()
+                        continue
+                    default_theme = name
+                    _persist()
+                    log.info("default theme set to %r", default_theme)
                     _publish_state()
                 else:
                     try:
@@ -366,8 +430,8 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
 
             left_state, right_state = engine.step(dt)
 
-            # The engine changes mode and look on its own (PIR startle, SCARE's
-            # timed return to IDLE, look reset on scare/sleep) — publish
+            # The engine changes mode and look on its own (SCARE's timed
+            # return to IDLE, look reset on scare/sleep) — publish
             # whenever either changes so the retained MQTT state tracks
             # reality, not just cmd topics.
             if mqtt_input is not None:
@@ -379,9 +443,9 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
             t_anim = frames_done * dt  # deterministic animation clock (spin)
             left_frame = left_renderer.render(left_state, t_anim)
             right_frame = right_renderer.render(right_state, t_anim)
-            if cfg.display.mirror_left:
+            if mirror_left:
                 left_frame = np.fliplr(left_frame)
-            if cfg.display.mirror_right:
+            if mirror_right:
                 right_frame = np.fliplr(right_frame)
             output.show(left_frame, right_frame)
             frames_done += 1
@@ -417,7 +481,6 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
             except Exception:
                 log.warning("error closing output", exc_info=True)
         _stop_input(mqtt_input, "mqtt")
-        _stop_input(pir_input, "pir")
         log.info("shutdown complete")
 
 

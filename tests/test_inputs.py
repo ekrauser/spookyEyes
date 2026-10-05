@@ -1,4 +1,4 @@
-"""Tests for inputs/mqtt.py and inputs/pir.py using injected fakes."""
+"""Tests for inputs/mqtt.py using an injected fake paho client."""
 
 from __future__ import annotations
 
@@ -8,9 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from spookyeyes.config import MqttConfig, PirConfig
+from spookyeyes.config import MqttConfig
 from spookyeyes.inputs.mqtt import MqttInput
-from spookyeyes.inputs.pir import PirInput, PirUnavailable
 from spookyeyes.model import Event, Mode
 
 # ---------------------------------------------------------------------------
@@ -123,6 +122,9 @@ def test_on_connect_subscribes_all_cmd_topics(mqtt_setup):
         "spookyeyes/cmd/look",
         "spookyeyes/cmd/doorbell_x",
         "spookyeyes/cmd/doorbell_y",
+        "spookyeyes/cmd/mirror_left",
+        "spookyeyes/cmd/mirror_right",
+        "spookyeyes/cmd/default_theme",
     }
 
 
@@ -282,6 +284,35 @@ def test_doorbell_calibration_invalid_dropped(mqtt_setup, payload):
     assert ("spookyeyes/state/doorbell_y", "-0.3", 0, True) in fake.published
 
 
+@pytest.mark.parametrize("payload,value", [(b"ON", True), (b"off", False), (b"1", True)])
+def test_mirror_command(mqtt_setup, payload, value):
+    _, events, fake, _ = mqtt_setup
+    fake.simulate_message("spookyeyes/cmd/mirror_left", payload)
+    fake.simulate_message("spookyeyes/cmd/mirror_right", payload)
+    assert drain(events) == [Event("mirror", {"left": value}), Event("mirror", {"right": value})]
+
+
+def test_mirror_invalid_dropped_and_republished(mqtt_setup):
+    _, events, fake, inp = mqtt_setup
+    inp.state_provider = lambda: {"theme": "human", "mode": "idle", "brightness": 1.0,
+                                  "mirror": (True, False)}
+    fake.simulate_message("spookyeyes/cmd/mirror_left", b"sideways")
+    assert drain(events) == []
+    assert ("spookyeyes/state/mirror_left", "ON", 0, True) in fake.published
+    assert ("spookyeyes/state/mirror_right", "OFF", 0, True) in fake.published
+
+
+def test_default_theme_command_must_be_exposed(mqtt_setup):
+    _, events, fake, inp = mqtt_setup
+    inp.state_provider = lambda: {"theme": "human", "mode": "idle", "brightness": 1.0,
+                                  "default_theme": "human"}
+    fake.simulate_message("spookyeyes/cmd/default_theme", b"demon")
+    assert drain(events) == [Event("default_theme", "demon")]
+    fake.simulate_message("spookyeyes/cmd/default_theme", b"vampire")  # not in options
+    assert drain(events) == []
+    assert ("spookyeyes/state/default_theme", "human", 0, True) in fake.published
+
+
 def test_non_utf8_payload_dropped_without_exception(mqtt_setup):
     _, events, fake, _ = mqtt_setup
     fake.simulate_message("spookyeyes/cmd/theme", b"\xff\xfe\x80")
@@ -305,6 +336,9 @@ DISCOVERY_TOPICS = {
     "homeassistant/number/spookyeyes_brightness/config",
     "homeassistant/number/spookyeyes_doorbell_x/config",
     "homeassistant/number/spookyeyes_doorbell_y/config",
+    "homeassistant/switch/spookyeyes_mirror_left/config",
+    "homeassistant/switch/spookyeyes_mirror_right/config",
+    "homeassistant/select/spookyeyes_default_theme/config",
     "homeassistant/button/spookyeyes_blink/config",
 }
 
@@ -335,7 +369,7 @@ def test_discovery_common_keys_and_device_block(mqtt_setup):
         assert payload["device"]["identifiers"] == ["spookyeyes"], topic
         assert payload["device"]["name"] == "Spooky Eyes", topic
         unique_ids.add(payload["unique_id"])
-    assert len(unique_ids) == 7, "unique_id must differ per entity"
+    assert len(unique_ids) == 10, "unique_id must differ per entity"
 
 
 def test_discovery_entity_specifics(mqtt_setup):
@@ -361,6 +395,15 @@ def test_discovery_entity_specifics(mqtt_setup):
         assert n["state_topic"] == f"spookyeyes/state/doorbell_{axis}"
         assert (n["min"], n["max"]) == (-1.0, 1.0)
         assert n["entity_category"] == "config"
+    for side in ("left", "right"):
+        sw = payloads[f"homeassistant/switch/spookyeyes_mirror_{side}/config"]
+        assert sw["command_topic"] == f"spookyeyes/cmd/mirror_{side}"
+        assert sw["state_topic"] == f"spookyeyes/state/mirror_{side}"
+        assert sw["entity_category"] == "config"
+    dflt = payloads["homeassistant/select/spookyeyes_default_theme/config"]
+    assert dflt["options"] == theme["options"]
+    assert dflt["command_topic"] == "spookyeyes/cmd/default_theme"
+    assert dflt["entity_category"] == "config"
     number = payloads["homeassistant/number/spookyeyes_brightness/config"]
     assert number["min"] == 0.0
     assert number["max"] == 1.0
@@ -377,7 +420,7 @@ def test_discovery_disabled():
     fake.simulate_connect()
     assert discovery_payloads(fake) == {}
     # availability + subscriptions still happen
-    assert len(fake.subscriptions) == 7
+    assert len(fake.subscriptions) == 10
     assert ("spookyeyes/availability", "online", 0, True) in fake.published
 
 
@@ -402,6 +445,14 @@ def test_publish_state_doorbell_topics(mqtt_setup):
     inp.publish_state("ghost", "idle", 1.0, "center", (0.5, -0.25))
     assert ("spookyeyes/state/doorbell_x", "0.5", 0, True) in fake.published
     assert ("spookyeyes/state/doorbell_y", "-0.25", 0, True) in fake.published
+
+
+def test_publish_state_mirror_and_default_theme(mqtt_setup):
+    _, _, fake, inp = mqtt_setup
+    inp.publish_state("ghost", "idle", 1.0, mirror=(False, True), default_theme="ghost")
+    assert ("spookyeyes/state/mirror_left", "OFF", 0, True) in fake.published
+    assert ("spookyeyes/state/mirror_right", "ON", 0, True) in fake.published
+    assert ("spookyeyes/state/default_theme", "ghost", 0, True) in fake.published
 
 
 def test_publish_state_look_defaults_to_center(mqtt_setup):
@@ -436,98 +487,3 @@ def test_custom_base_topic():
     theme = payloads["homeassistant/select/spookyeyes_theme/config"]
     assert theme["command_topic"] == "props/eyes/cmd/theme"
     assert theme["availability_topic"] == "props/eyes/availability"
-
-
-# ---------------------------------------------------------------------------
-# PIR
-# ---------------------------------------------------------------------------
-
-
-class FakeSensor:
-    def __init__(self, pin: int) -> None:
-        self.pin = pin
-        self.when_motion = None
-        self.closed = False
-
-    def close(self) -> None:
-        self.closed = True
-
-
-class FakeClock:
-    def __init__(self) -> None:
-        self.now = 100.0
-
-    def __call__(self) -> float:
-        return self.now
-
-    def advance(self, dt: float) -> None:
-        self.now += dt
-
-
-@pytest.fixture
-def pir_setup():
-    cfg = PirConfig(enabled=True, pin=17, cooldown=10.0)
-    events: queue.Queue[Event] = queue.Queue()
-    sensors: list[FakeSensor] = []
-
-    def factory(pin: int) -> FakeSensor:
-        sensors.append(FakeSensor(pin))
-        return sensors[-1]
-
-    clock = FakeClock()
-    inp = PirInput(cfg, events, sensor_factory=factory, monotonic=clock)
-    return events, sensors[0], clock, inp
-
-
-def test_pir_wires_when_motion_to_configured_pin(pir_setup):
-    _, sensor, _, _ = pir_setup
-    assert sensor.pin == 17
-    assert callable(sensor.when_motion)
-
-
-def test_pir_first_motion_forwarded(pir_setup):
-    events, sensor, _, _ = pir_setup
-    sensor.when_motion()
-    assert drain(events) == [Event("motion")]
-
-
-def test_pir_cooldown_suppresses_second_event(pir_setup):
-    events, sensor, clock, _ = pir_setup
-    sensor.when_motion()
-    clock.advance(9.99)
-    sensor.when_motion()
-    assert drain(events) == [Event("motion")]
-
-
-def test_pir_after_cooldown_forwards_again(pir_setup):
-    events, sensor, clock, _ = pir_setup
-    sensor.when_motion()
-    clock.advance(5.0)
-    sensor.when_motion()  # suppressed; must NOT reset the cooldown window
-    clock.advance(5.0)  # 10.0s since last *forwarded* event
-    sensor.when_motion()
-    assert drain(events) == [Event("motion"), Event("motion")]
-
-
-def test_pir_close_releases_sensor(pir_setup):
-    events, sensor, _, inp = pir_setup
-    inp.close()
-    assert sensor.closed
-    assert sensor.when_motion is None
-    inp.close()  # idempotent
-
-
-def test_pir_unavailable_on_import_error():
-    def factory(pin: int):
-        raise ImportError("No module named 'gpiozero'")
-
-    with pytest.raises(PirUnavailable):
-        PirInput(PirConfig(), queue.Queue(), sensor_factory=factory)
-
-
-def test_pir_unavailable_on_pin_error():
-    def factory(pin: int):
-        raise RuntimeError("BadPinFactory: no default pin factory")
-
-    with pytest.raises(PirUnavailable):
-        PirInput(PirConfig(), queue.Queue(), sensor_factory=factory)

@@ -124,14 +124,6 @@ def test_mode_change_to_scare_or_sleep_resets_look(mode: str) -> None:
     assert eng.look_xy == (0.0, 0.0)
 
 
-def test_pir_motion_scare_resets_look() -> None:
-    eng = make_engine()
-    eng.handle(Event("look", "left"))
-    eng.handle(Event("motion"))
-    assert eng.mode is Mode.SCARE
-    assert eng.look == "center"
-
-
 def test_scare_auto_return_leaves_look_centered() -> None:
     eng = make_engine()
     eng.handle(Event("look", "left"))

@@ -29,8 +29,8 @@ if [ ! -x "$VENV/bin/python" ]; then
 fi
 "$VENV/bin/pip" install --quiet --upgrade pip
 
-echo "==> install spookyeyes (editable, with mqtt+pir extras)"
-"$VENV/bin/pip" install --quiet -e "$REPO[mqtt,pir]"
+echo "==> install spookyeyes (editable, with the mqtt extra)"
+"$VENV/bin/pip" install --quiet -e "$REPO[mqtt]"
 
 if [ ! -f "$REPO/config.toml" ]; then
     echo "==> creating config.toml from config.example.toml (edit it!)"
@@ -57,7 +57,7 @@ fi
 cat <<EOF
 
 Done. Next:
-  1. Edit $REPO/config.toml (mqtt/pir enable, broker credentials, theme).
+  1. Edit $REPO/config.toml (mqtt enable, broker credentials, theme).
   2. Make sure the displays work first:  $VENV/bin/python $SCRIPT_DIR/test_pattern.py
   3. sudo systemctl start spookyeyes
   4. journalctl -u spookyeyes -f          # watch logs / measured FPS

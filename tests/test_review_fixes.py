@@ -49,8 +49,8 @@ def test_config_rejects_string_for_int(tmp_path):
 
 
 def test_config_rejects_string_for_float(tmp_path):
-    with pytest.raises(ConfigError, match=r"\[pir\] cooldown"):
-        _load_toml(tmp_path, '[pir]\ncooldown = "10"\n')
+    with pytest.raises(ConfigError, match=r"\[look\] amplitude"):
+        _load_toml(tmp_path, '[look]\namplitude = "1"\n')
 
 
 def test_config_rejects_int_for_bool(tmp_path):
@@ -64,9 +64,19 @@ def test_config_rejects_int_for_str(tmp_path):
 
 
 def test_config_accepts_int_for_float_field(tmp_path):
-    cfg = _load_toml(tmp_path, "[pir]\ncooldown = 10\n")
-    assert cfg.pir.cooldown == 10.0
-    assert isinstance(cfg.pir.cooldown, float)
+    cfg = _load_toml(tmp_path, "[look]\namplitude = 1\n")
+    assert cfg.look.amplitude == 1.0
+    assert isinstance(cfg.look.amplitude, float)
+
+
+def test_config_theme_expose_list(tmp_path):
+    cfg = _load_toml(tmp_path, '[theme]\nexpose = ["human", "demon"]\n')
+    assert cfg.theme.expose == ["human", "demon"]
+    assert _load_toml(tmp_path, "[theme]\n").theme.expose == []
+    with pytest.raises(ConfigError, match=r"\[theme\] expose"):
+        _load_toml(tmp_path, '[theme]\nexpose = "human"\n')
+    with pytest.raises(ConfigError, match=r"\[theme\] expose"):
+        _load_toml(tmp_path, "[theme]\nexpose = [1, 2]\n")
 
 
 def test_config_utf8_content_ok(tmp_path):

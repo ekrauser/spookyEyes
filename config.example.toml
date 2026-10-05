@@ -16,8 +16,11 @@ scale = 2                 # preview window scale
 record_dir = "out"
 
 [theme]
-name = "human"            # "human" | "demon" | "ghost"
+name = "human"            # startup theme, unless a default was saved from HA
 dir = "themes"
+# Themes offered in the Home Assistant Theme / Default theme selects, in this
+# order. Empty = every theme in `dir`. Hidden themes still load if commanded.
+expose = []
 
 [mqtt]
 enabled = false
@@ -36,11 +39,9 @@ client_id = "spookyeyes"
 amplitude = 0.7           # how far left/right/up/down aim
 doorbell_x = 0.7          # default aim at the doorbell button
 doorbell_y = -0.3
-# The Doorbell X/Y sliders in Home Assistant save their values here (next to
-# this file) and override doorbell_x/doorbell_y at startup.
-calibration_file = "look-calibration.json"
 
-[pir]
-enabled = false
-pin = 17                  # BCM pin with the PIR OUT signal
-cooldown = 10.0           # seconds between motion triggers
+[settings]
+# Values changed from Home Assistant (Doorbell X/Y, Mirror switches, Default
+# theme) are saved here, next to this file, and override the defaults above
+# at startup. Delete the file to go back to the config values.
+file = "settings.json"
