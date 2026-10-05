@@ -181,7 +181,10 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
 
     left_renderer, right_renderer = _make_renderers(theme)
     rng = random.Random(args.seed)  # Random(None) seeds from the OS
-    engine = behavior_mod.BehaviorEngine(theme.motion, rng=rng)
+    presets = behavior_mod.look_presets(
+        cfg.look.amplitude, (cfg.look.doorbell_x, cfg.look.doorbell_y)
+    )
+    engine = behavior_mod.BehaviorEngine(theme.motion, rng=rng, presets=presets)
 
     if events is None:
         events = queue.Queue()
@@ -195,17 +198,25 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
         mode = getattr(engine, "mode", Mode.IDLE)
         return mode.value if isinstance(mode, Mode) else str(mode)
 
+    def _current_look() -> str:
+        return str(getattr(engine, "look", "center"))
+
     def _publish_state() -> None:
         if mqtt_input is None:
             return
         try:
-            mqtt_input.publish_state(theme_name, _current_mode_str(), brightness)
+            mqtt_input.publish_state(
+                theme_name, _current_mode_str(), brightness, _current_look()
+            )
         except Exception:
             log.warning("mqtt publish_state failed", exc_info=True)
 
     if mqtt_input is not None:
-        # Republished on every (re)connect so retained state survives restarts.
-        mqtt_input.state_provider = lambda: (theme_name, _current_mode_str(), brightness)
+        # Republished on every (re)connect so retained state survives restarts,
+        # and after a rejected command so HA's selects snap back.
+        mqtt_input.state_provider = lambda: (
+            theme_name, _current_mode_str(), brightness, _current_look()
+        )
 
     output: Output | None = None
     old_handlers: dict[signal.Signals, object] = {}
@@ -249,7 +260,7 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
         next_t = time.monotonic()
         fps_t0 = next_t
 
-        last_pub_mode: object = None
+        last_pub: tuple[object, object] | None = None
 
         while running:
             if stop_signum is not None:
@@ -295,20 +306,21 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
                         except (TypeError, ValueError):
                             pass
                         _publish_state()
-                    elif ev.kind == "mode":
+                    elif ev.kind in ("mode", "look"):
                         _publish_state()
             if not running:
                 break
 
             left_state, right_state = engine.step(dt)
 
-            # The engine changes mode on its own (PIR startle, SCARE's timed
-            # return to IDLE) — publish whenever the observed mode changes so
-            # the retained MQTT state tracks reality, not just cmd topics.
+            # The engine changes mode and look on its own (PIR startle, SCARE's
+            # timed return to IDLE, look reset on scare/sleep) — publish
+            # whenever either changes so the retained MQTT state tracks
+            # reality, not just cmd topics.
             if mqtt_input is not None:
-                mode_now = getattr(engine, "mode", None)
-                if mode_now is not last_pub_mode:
-                    last_pub_mode = mode_now
+                now_state = (getattr(engine, "mode", None), getattr(engine, "look", None))
+                if now_state != last_pub:
+                    last_pub = now_state
                     _publish_state()
 
             t_anim = frames_done * dt  # deterministic animation clock (spin)

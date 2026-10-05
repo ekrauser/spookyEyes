@@ -120,6 +120,7 @@ def test_on_connect_subscribes_all_cmd_topics(mqtt_setup):
         "spookyeyes/cmd/mode",
         "spookyeyes/cmd/brightness",
         "spookyeyes/cmd/blink",
+        "spookyeyes/cmd/look",
     }
 
 
@@ -218,6 +219,44 @@ def test_blink_command_any_payload(mqtt_setup):
     assert drain(events) == [Event("blink"), Event("blink")]
 
 
+@pytest.mark.parametrize("payload", [b"doorbell", b"Right", b" center "])
+def test_look_command_option(mqtt_setup, payload):
+    _, events, fake, _ = mqtt_setup
+    fake.simulate_message("spookyeyes/cmd/look", payload)
+    assert drain(events) == [Event("look", payload.decode().strip().lower())]
+
+
+def test_look_command_unknown_dropped_and_state_republished(mqtt_setup):
+    _, events, fake, inp = mqtt_setup
+    inp.state_provider = lambda: ("human", "idle", 1.0, "doorbell")
+    fake.simulate_message("spookyeyes/cmd/look", b"sideways")
+    assert drain(events) == []
+    assert ("spookyeyes/state/look", "doorbell", 0, True) in fake.published
+
+
+def test_look_command_json_xy(mqtt_setup):
+    _, events, fake, _ = mqtt_setup
+    fake.simulate_message("spookyeyes/cmd/look", b'{"x": 0.7, "y": -0.2}')
+    assert drain(events) == [Event("look", (0.7, -0.2))]
+
+
+def test_look_command_json_clamped(mqtt_setup):
+    _, events, fake, _ = mqtt_setup
+    fake.simulate_message("spookyeyes/cmd/look", b'{"x": 5, "y": -3}')
+    assert drain(events) == [Event("look", (1.0, -1.0))]
+
+
+@pytest.mark.parametrize(
+    "payload", [b'{"x": 1}', b'{"x": "a", "y": 0}', b'{"x": NaN, "y": 0}', b"{oops"]
+)
+def test_look_command_json_invalid_dropped(mqtt_setup, payload):
+    _, events, fake, inp = mqtt_setup
+    inp.state_provider = lambda: ("human", "idle", 1.0, "center")
+    fake.simulate_message("spookyeyes/cmd/look", payload)
+    assert drain(events) == []
+    assert ("spookyeyes/state/look", "center", 0, True) in fake.published
+
+
 def test_non_utf8_payload_dropped_without_exception(mqtt_setup):
     _, events, fake, _ = mqtt_setup
     fake.simulate_message("spookyeyes/cmd/theme", b"\xff\xfe\x80")
@@ -237,6 +276,7 @@ def test_unknown_topic_ignored(mqtt_setup):
 DISCOVERY_TOPICS = {
     "homeassistant/select/spookyeyes_theme/config",
     "homeassistant/select/spookyeyes_mode/config",
+    "homeassistant/select/spookyeyes_look/config",
     "homeassistant/number/spookyeyes_brightness/config",
     "homeassistant/button/spookyeyes_blink/config",
 }
@@ -268,7 +308,7 @@ def test_discovery_common_keys_and_device_block(mqtt_setup):
         assert payload["device"]["identifiers"] == ["spookyeyes"], topic
         assert payload["device"]["name"] == "Spooky Eyes", topic
         unique_ids.add(payload["unique_id"])
-    assert len(unique_ids) == 4, "unique_id must differ per entity"
+    assert len(unique_ids) == 5, "unique_id must differ per entity"
 
 
 def test_discovery_entity_specifics(mqtt_setup):
@@ -281,6 +321,13 @@ def test_discovery_entity_specifics(mqtt_setup):
     assert theme["state_topic"] == "spookyeyes/state/theme"
     mode = payloads["homeassistant/select/spookyeyes_mode/config"]
     assert set(mode["options"]) == {"idle", "scare", "stare", "sleep"}
+    look = payloads["homeassistant/select/spookyeyes_look/config"]
+    assert look["unique_id"] == "spookyeyes_look"
+    assert look["name"] == "Look"
+    assert look["command_topic"] == "spookyeyes/cmd/look"
+    assert look["state_topic"] == "spookyeyes/state/look"
+    assert look["options"] == ["center", "left", "right", "up", "down", "doorbell"]
+    assert look["icon"] == "mdi:eye-arrow-right-outline"
     number = payloads["homeassistant/number/spookyeyes_brightness/config"]
     assert number["min"] == 0.0
     assert number["max"] == 1.0
@@ -297,7 +344,7 @@ def test_discovery_disabled():
     fake.simulate_connect()
     assert discovery_payloads(fake) == {}
     # availability + subscriptions still happen
-    assert len(fake.subscriptions) == 4
+    assert len(fake.subscriptions) == 5
     assert ("spookyeyes/availability", "online", 0, True) in fake.published
 
 
@@ -306,14 +353,21 @@ def test_discovery_disabled():
 # ---------------------------------------------------------------------------
 
 
-def test_publish_state_three_retained_topics(mqtt_setup):
+def test_publish_state_four_retained_topics(mqtt_setup):
     _, _, fake, inp = mqtt_setup
-    inp.publish_state("ghost", "scare", 0.75)
+    inp.publish_state("ghost", "scare", 0.75, "doorbell")
     assert fake.published == [
         ("spookyeyes/state/theme", "ghost", 0, True),
         ("spookyeyes/state/mode", "scare", 0, True),
         ("spookyeyes/state/brightness", "0.75", 0, True),
+        ("spookyeyes/state/look", "doorbell", 0, True),
     ]
+
+
+def test_publish_state_look_defaults_to_center(mqtt_setup):
+    _, _, fake, inp = mqtt_setup
+    inp.publish_state("ghost", "idle", 1.0)
+    assert ("spookyeyes/state/look", "center", 0, True) in fake.published
 
 
 def test_publish_state_accepts_mode_enum(mqtt_setup):

@@ -165,6 +165,7 @@ def test_main_handles_theme_switch_and_input_events(theme_setup) -> None:
     events.put(Event("theme", "no-such-theme"))  # warning, keeps running
     events.put(Event("brightness", 0.5))
     events.put(Event("blink"))
+    events.put(Event("look", "doorbell"))
     events.put(Event("mode", "stare"))
     rc = app.main(
         [
@@ -229,3 +230,53 @@ def test_main_rejects_unknown_output() -> None:
 
     with pytest.raises(SystemExit):
         app.main(["--output", "hologram"])
+
+
+def test_main_publishes_look_state_and_scare_reset(theme_setup, tmp_path, monkeypatch) -> None:
+    """End to end over a fake broker: a look command is published on the
+    state topic, and a scare resets it to center and publishes that too."""
+    from spookyeyes import app
+    from spookyeyes.inputs import mqtt as mqtt_mod
+
+    published: list[tuple[str, object]] = []
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.on_connect = None
+            self.on_message = None
+
+        def username_pw_set(self, *a, **k): pass
+        def will_set(self, *a, **k): pass
+        def reconnect_delay_set(self, *a, **k): pass
+        def connect_async(self, *a, **k): pass
+        def loop_start(self): pass
+        def loop_stop(self): pass
+        def disconnect(self): pass
+        def subscribe(self, *a, **k): pass
+
+        def publish(self, topic, payload=None, qos=0, retain=False):
+            published.append((topic, payload))
+
+    monkeypatch.setattr(mqtt_mod.MqttInput, "_default_client_factory", lambda self: FakeClient())
+
+    config = tmp_path / "config_mqtt.toml"
+    config.write_text(
+        theme_setup.read_text()
+        + "\n[mqtt]\nenabled = true\n"
+        + "\n[look]\ndoorbell_x = 0.5\ndoorbell_y = -0.1\n"
+    )
+    events: queue.Queue = queue.Queue()
+    events.put(Event("look", "doorbell"))
+    events.put(Event("mode", "stare"))
+    events.put(Event("mode", "scare"))
+    rc = app.main(
+        ["--config", str(config), "--output", "null", "--frames", "5", "--seed", "1", "--fps", "120"],
+        events=events,
+    )
+    assert rc == 0
+    looks = [p for t, p in published if t == "spookyeyes/state/look"]
+    assert "doorbell" in looks           # after the look command
+    assert looks[-1] == "center"         # reset by the scare, published
+    assert looks.index("doorbell") < len(looks) - 1
+    modes = [p for t, p in published if t == "spookyeyes/state/mode"]
+    assert modes[-1] == "scare"

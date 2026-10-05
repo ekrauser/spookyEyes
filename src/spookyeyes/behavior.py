@@ -11,6 +11,10 @@ Implements the DESIGN.md contract:
 - STARE: gaze eases to (0, 0) and holds; blink interval x4.
 - SLEEP: lids ease closed; every ~10 s a small twitch; motion events ignored;
   on leaving, the eyes reopen smoothly.
+- LOOK (orthogonal to mode): a named preset or raw (x, y) aims both eyes with
+  a normal saccade and holds. In IDLE a held look pauses the wander; "center"
+  resumes it. In STARE the look offset is the stare target. Entering SCARE or
+  SLEEP resets the look to "center" (the app publishes that reset).
 
 All randomness flows through ``self.rng`` so a seeded engine stepped with a
 fixed dt sequence is fully deterministic. Every field of the returned
@@ -23,7 +27,7 @@ import logging
 import math
 import random
 
-from .model import Event, EyeState, Mode, MotionParams
+from .model import LOOK_CENTER, LOOK_OPTIONS, Event, EyeState, Mode, MotionParams
 
 log = logging.getLogger("spookyeyes.behavior")
 
@@ -62,6 +66,35 @@ DRIFT_W2 = 0.63
 MAX_DT = 0.25               # clamp a stalled frame so state cannot teleport
 MIN_SACCADE_DUR = 1e-3
 
+LOOK_AMPLITUDE = 0.7        # default aim for left/right/up/down
+DOORBELL_XY = (0.7, -0.3)   # default doorbell preset (visitor's right, a bit low)
+
+Vec = tuple[float, float]
+
+
+def look_presets(
+    amplitude: float = LOOK_AMPLITUDE, doorbell: Vec = DOORBELL_XY
+) -> dict[str, Vec]:
+    """Gaze coordinates for each LOOK_OPTIONS name.
+
+    Directions are from the visitor's point of view: they stand outside facing
+    the eyes, so their right is the eyes' screen right, which is +gaze_x
+    (EyeState convention: positive = viewer's right, positive y = up). No
+    mirroring is needed here; ``[display] mirror_*`` handles panel mounting.
+    """
+    a = _clamp(float(amplitude), 0.0, 1.0)
+    return {
+        "center": (0.0, 0.0),
+        "left": (-a, 0.0),
+        "right": (a, 0.0),
+        "up": (0.0, a),
+        "down": (0.0, -a),
+        "doorbell": (
+            _clamp(float(doorbell[0]), -1.0, 1.0),
+            _clamp(float(doorbell[1]), -1.0, 1.0),
+        ),
+    }
+
 
 def _clamp(v: float, lo: float, hi: float) -> float:
     return lo if v < lo else hi if v > hi else v
@@ -79,11 +112,23 @@ class BehaviorEngine:
     ``random.Random`` for deterministic output (tests, demos, ``--seed``).
     """
 
-    def __init__(self, motion: MotionParams, rng: random.Random | None = None) -> None:
+    def __init__(
+        self,
+        motion: MotionParams,
+        rng: random.Random | None = None,
+        presets: dict[str, Vec] | None = None,
+    ) -> None:
         self.motion = motion
         self.rng = rng if rng is not None else random.Random()
         self._mode = Mode.IDLE
         self._brightness = 1.0
+
+        # look: named/continuous aim that holds until the next look command
+        self._presets: dict[str, Vec] = look_presets()
+        if presets:
+            self._presets.update(presets)
+        self._look = LOOK_CENTER
+        self._look_xy: Vec = (0.0, 0.0)
 
         # gaze: current per-eye position (drift excluded) + active saccade
         self._gaze_l: tuple[float, float] = (0.0, 0.0)
@@ -131,6 +176,15 @@ class BehaviorEngine:
     def mode(self) -> Mode:
         return self._mode
 
+    @property
+    def look(self) -> str:
+        """Current look option name (nearest preset for continuous aims)."""
+        return self._look
+
+    @property
+    def look_xy(self) -> Vec:
+        return self._look_xy
+
     def set_motion(self, motion: MotionParams) -> None:
         """Swap animation tuning (theme switch) without disturbing the pose.
 
@@ -168,6 +222,8 @@ class BehaviorEngine:
             self._brightness = _clamp(level, 0.0, 1.0)
         elif kind == "blink":
             self._start_blink()
+        elif kind == "look":
+            self._handle_look(event.value)
         elif kind == "motion":
             if self._mode is Mode.IDLE:
                 self._transition(Mode.SCARE)
@@ -196,8 +252,8 @@ class BehaviorEngine:
                     self._scare_burst_left -= 1
                     self._scare_next = self._uniform(SCARE_SACCADE_GAP)
 
-        # IDLE wander scheduling
-        if self._mode is Mode.IDLE:
+        # IDLE wander scheduling (paused while a look is held)
+        if self._mode is Mode.IDLE and self._look == LOOK_CENTER:
             self._sacc_timer -= dt
             if self._sacc_timer <= 0.0:
                 to_l, to_r = self._pick_targets()
@@ -335,26 +391,92 @@ class BehaviorEngine:
         if target is Mode.SCARE:
             self._enter_scare()
         elif target is Mode.STARE:
+            # stare target = center + look offset (stare + doorbell = hard
+            # stare at the button)
             self._start_saccade(
-                (0.0, 0.0), (0.0, 0.0), self._uniform(self.motion.saccade_duration)
+                self._look_xy, self._look_xy, self._uniform(self.motion.saccade_duration)
             )
             self._blink_timer = (
                 self._uniform(self.motion.blink_interval) * STARE_BLINK_MULT
             )
         elif target is Mode.SLEEP:
+            self._reset_look()
             self._twitch_timer = self._uniform(TWITCH_INTERVAL)
             self._sacc_active = False  # gaze freezes behind closed lids
         else:  # IDLE (mode command, or SCARE auto-return / waking up)
             self._sacc_timer = self._uniform(self.motion.saccade_interval)
             self._blink_timer = self._uniform(self.motion.blink_interval)
             self._pupil_target = self._pupil  # walk resumes without a jump
+            if self._look != LOOK_CENTER:
+                # a look commanded while asleep/scared is honoured on waking
+                self._start_saccade(
+                    self._look_xy,
+                    self._look_xy,
+                    self._uniform(self.motion.saccade_duration),
+                )
 
     def _enter_scare(self) -> None:
         self._mode = Mode.SCARE
+        self._reset_look()  # a scare always ends up centered
         self._scare_timer = SCARE_DURATION
         self._start_saccade((0.0, 0.0), (0.0, 0.0), SCARE_SNAP_DUR)
         self._scare_burst_left = self.rng.randint(2, 3)
         self._scare_next = self._uniform(SCARE_FIRST_GAP)
+
+    # -- look ------------------------------------------------------------------
+
+    def _handle_look(self, value: object) -> None:
+        if isinstance(value, str):
+            name = value.strip().lower()
+            if name not in self._presets or name not in LOOK_OPTIONS:
+                log.warning("ignoring look event with unknown option %r", value)
+                return
+            self._apply_look(name, self._presets[name])
+            return
+        xy = self._parse_xy(value)
+        if xy is None:
+            log.warning("ignoring look event with invalid value %r", value)
+            return
+        self._apply_look(self.nearest_look(xy), xy)
+
+    @staticmethod
+    def _parse_xy(value: object) -> Vec | None:
+        try:
+            if isinstance(value, dict):
+                x, y = float(value["x"]), float(value["y"])
+            else:
+                x, y = value  # type: ignore[misc]
+                x, y = float(x), float(y)
+        except (TypeError, ValueError, KeyError):
+            return None
+        if not (math.isfinite(x) and math.isfinite(y)):
+            return None
+        return (_clamp(x, -1.0, 1.0), _clamp(y, -1.0, 1.0))
+
+    def nearest_look(self, xy: Vec) -> str:
+        """Name of the preset closest to ``xy`` (ties go to LOOK_OPTIONS order)."""
+        best, best_d = LOOK_CENTER, math.inf
+        for name in LOOK_OPTIONS:
+            px, py = self._presets[name]
+            d = (px - xy[0]) ** 2 + (py - xy[1]) ** 2
+            if d < best_d:
+                best, best_d = name, d
+        return best
+
+    def _apply_look(self, name: str, xy: Vec) -> None:
+        self._look = name
+        self._look_xy = xy
+        if self._mode in (Mode.IDLE, Mode.STARE):
+            self._start_saccade(xy, xy, self._uniform(self.motion.saccade_duration))
+            if self._mode is Mode.IDLE and name == LOOK_CENTER:
+                # release: wander resumes after a fresh interval
+                self._sacc_timer = self._uniform(self.motion.saccade_interval)
+        # SCARE has its own choreography and SLEEP hides the gaze; the look is
+        # stored and applied when the mode returns to IDLE/STARE.
+
+    def _reset_look(self) -> None:
+        self._look = LOOK_CENTER
+        self._look_xy = (0.0, 0.0)
 
     def _pick_targets(self) -> tuple[tuple[float, float], tuple[float, float]]:
         """Left target uniform in the wander disc; right = left + crazy offset."""

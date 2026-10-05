@@ -70,11 +70,13 @@ theme.json) so all tests run without the real `themes/` assets.
 
 ### behavior.py (+ tests/test_behavior.py) — agent BEHAVIOR
 
-`BehaviorEngine(motion: MotionParams, rng: random.Random | None = None)`
+`BehaviorEngine(motion: MotionParams, rng: random.Random | None = None, presets=None)`
 - `step(dt: float) -> tuple[EyeState, EyeState]` — advance and return (left, right)
-- `handle(event: Event) -> None` — kinds: mode, brightness, blink, motion
+- `handle(event: Event) -> None` — kinds: mode, brightness, blink, motion, look
 - `set_motion(motion: MotionParams) -> None` — on theme switch, keep pose
-- `mode` property -> Mode
+- `mode` property -> Mode; `look` property -> option name; `look_xy` -> (x, y)
+- `look_presets(amplitude, doorbell_xy)` builds the name → (x, y) table from
+  `[look]` config; the app passes it as `presets`.
 
 State machine (all randomness through `self.rng` for testability):
 - **IDLE**: pick gaze targets within `wander` radius at uniform
@@ -88,7 +90,13 @@ State machine (all randomness through `self.rng` for testability):
   pupil → 0.1 fast, gaze snaps to center-front then 2–3 rapid saccades; after
   ~6 s auto-return to IDLE. Re-triggering while active restarts the timer.
   `motion` events are ignored in STARE/SLEEP and rate-limited by inputs anyway.
-- **STARE**: gaze eases to (0,0) and holds; blink interval x4.
+- **STARE**: gaze eases to (0,0) + look offset and holds; blink interval x4.
+- **LOOK** (orthogonal to mode): `Event("look", name | (x, y))` saccades both
+  eyes to the preset and holds; in IDLE the wander is paused until `center`;
+  entering SCARE or SLEEP resets the look to `center` (the app sees the change
+  on `engine.look` and publishes it). A look received in SCARE/SLEEP is stored
+  and applied when the mode returns to IDLE/STARE. Continuous (x, y) is
+  reported as the nearest preset name.
 - **SLEEP**: openness eases to 0 and holds; every ~10 s a small lid twitch;
   on leaving, eyes reopen smoothly.
 - Blink envelope: close in ~0.08 s / `blink_speed`, open in ~0.15 s / `blink_speed`;
@@ -136,12 +144,17 @@ v2 API (CallbackAPIVersion.VERSION2), lazy import so the package works without i
   - subscribe `base/cmd/mode` (idle|scare|stare|sleep) → Event("mode", value)
   - subscribe `base/cmd/brightness` (float 0..1) → Event("brightness", value)
   - subscribe `base/cmd/blink` (any payload) → Event("blink")
+  - subscribe `base/cmd/look` (center|left|right|up|down|doorbell, or JSON
+    `{"x","y"}` in -1..1) → Event("look", name | (x, y)); unknown payloads are
+    dropped and the current state republished via `state_provider`
   - publish retained availability `base/availability` = "online", LWT "offline"
-  - `publish_state(theme: str, mode: str, brightness: float)` publishes retained
-    `base/state/theme`, `base/state/mode`, `base/state/brightness`
+  - `publish_state(theme, mode, brightness, look="center")` publishes retained
+    `base/state/theme`, `base/state/mode`, `base/state/brightness`,
+    `base/state/look`
 - if `cfg.discovery`: on connect publish retained Home Assistant MQTT discovery
   configs under `homeassistant/select/spookyeyes_theme/config` (options
   human/demon/ghost), `homeassistant/select/spookyeyes_mode/config`,
+  `homeassistant/select/spookyeyes_look/config` (options in model.LOOK_OPTIONS),
   `homeassistant/number/spookyeyes_brightness/config` (0..1 step 0.05),
   `homeassistant/button/spookyeyes_blink/config`, all sharing one device block
   (identifiers ["spookyeyes"], name "Spooky Eyes") with availability_topic set.
