@@ -254,7 +254,7 @@ Unknown payloads are ignored and the current state is republished.
 *Doorbell Y* sliders (under Configuration). Stand on the walkway, set Mode to
 `stare`, and drag the sliders until the eyes are on the button: each change
 re-aims the eyes immediately and is saved on the Pi to
-`[look] calibration_file` (next to `config.toml`, gitignored), so it survives
+`[settings] file` (`settings.json` next to `config.toml`, gitignored), so it survives
 restarts and overrides `doorbell_x`/`doorbell_y` from the config. Set Look
 back to `center` when done.
 
