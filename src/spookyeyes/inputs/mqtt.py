@@ -57,6 +57,11 @@ class MqttInput:
             f"{base}/cmd/brightness": self._handle_brightness,
             f"{base}/cmd/blink": self._handle_blink,
             f"{base}/cmd/look": self._handle_look,
+            f"{base}/cmd/doorbell_x": lambda p: self._handle_doorbell("x", p),
+            f"{base}/cmd/doorbell_y": lambda p: self._handle_doorbell("y", p),
+            f"{base}/cmd/mirror_left": lambda p: self._handle_mirror("left", p),
+            f"{base}/cmd/mirror_right": lambda p: self._handle_mirror("right", p),
+            f"{base}/cmd/default_theme": self._handle_default_theme,
         }
 
     # -- lifecycle ---------------------------------------------------------
@@ -141,8 +146,13 @@ class MqttInput:
 
     def _republish_state(self) -> None:
         provider = self.state_provider
-        if provider is not None:
-            self.publish_state(*provider())
+        if provider is None:
+            return
+        state = provider()
+        if isinstance(state, dict):
+            self.publish_state(**state)
+        else:
+            self.publish_state(*state)
 
     def _on_connect_fail(self, client: Any, userdata: Any) -> None:
         # paho retries quietly forever; without this, an unreachable broker
@@ -234,10 +244,51 @@ class MqttInput:
             return
         self._events.put(Event("look", name))
 
+    def _handle_doorbell(self, axis: str, payload: str) -> None:
+        """Calibrate one axis of the doorbell preset (HA number slider)."""
+        try:
+            value = float(payload)
+        except ValueError:
+            log.warning("mqtt: invalid doorbell_%s %r, dropped", axis, payload)
+            self._republish_state()
+            return
+        if not math.isfinite(value):
+            log.warning("mqtt: non-finite doorbell_%s %r, dropped", axis, payload)
+            self._republish_state()
+            return
+        self._events.put(Event("doorbell", {axis: min(1.0, max(-1.0, value))}))
+
+    def _handle_mirror(self, side: str, payload: str) -> None:
+        """HA switch: ON/OFF flips one panel horizontally."""
+        word = payload.lower()
+        if word in ("on", "true", "1"):
+            value = True
+        elif word in ("off", "false", "0"):
+            value = False
+        else:
+            log.warning("mqtt: invalid mirror_%s %r, dropped (want ON|OFF)", side, payload)
+            self._republish_state()
+            return
+        self._events.put(Event("mirror", {side: value}))
+
+    def _handle_default_theme(self, payload: str) -> None:
+        if payload not in self._theme_options:
+            log.warning("mqtt: default theme %r is not an exposed theme, dropped", payload)
+            self._republish_state()
+            return
+        self._events.put(Event("default_theme", payload))
+
     # -- publishing (called from the app thread) ---------------------------
 
     def publish_state(
-        self, theme: str, mode: str, brightness: float, look: str = LOOK_CENTER
+        self,
+        theme: str,
+        mode: str,
+        brightness: float,
+        look: str = LOOK_CENTER,
+        doorbell: tuple[float, float] | None = None,
+        mirror: tuple[bool, bool] | None = None,
+        default_theme: str | None = None,
     ) -> None:
         """Publish retained state so HA entities reflect reality after changes."""
         client = self._client
@@ -251,6 +302,19 @@ class MqttInput:
             client.publish(f"{base}/state/brightness", format(brightness, "g"),
                            qos=0, retain=True)
             client.publish(f"{base}/state/look", str(look), qos=0, retain=True)
+            if doorbell is not None:
+                client.publish(f"{base}/state/doorbell_x", format(doorbell[0], "g"),
+                               qos=0, retain=True)
+                client.publish(f"{base}/state/doorbell_y", format(doorbell[1], "g"),
+                               qos=0, retain=True)
+            if mirror is not None:
+                client.publish(f"{base}/state/mirror_left", "ON" if mirror[0] else "OFF",
+                               qos=0, retain=True)
+                client.publish(f"{base}/state/mirror_right", "ON" if mirror[1] else "OFF",
+                               qos=0, retain=True)
+            if default_theme is not None:
+                client.publish(f"{base}/state/default_theme", str(default_theme),
+                               qos=0, retain=True)
         except Exception:
             log.exception("mqtt: error publishing state")
 
@@ -306,6 +370,60 @@ class MqttInput:
                 "step": 0.05,
                 "mode": "slider",
                 "icon": "mdi:brightness-6",
+                **common,
+            },
+            "homeassistant/number/spookyeyes_doorbell_x/config": {
+                "name": "Doorbell X",
+                "unique_id": "spookyeyes_doorbell_x",
+                "command_topic": f"{base}/cmd/doorbell_x",
+                "state_topic": f"{base}/state/doorbell_x",
+                "min": -1.0,
+                "max": 1.0,
+                "step": 0.02,
+                "mode": "slider",
+                "icon": "mdi:arrow-left-right",
+                "entity_category": "config",
+                **common,
+            },
+            "homeassistant/number/spookyeyes_doorbell_y/config": {
+                "name": "Doorbell Y",
+                "unique_id": "spookyeyes_doorbell_y",
+                "command_topic": f"{base}/cmd/doorbell_y",
+                "state_topic": f"{base}/state/doorbell_y",
+                "min": -1.0,
+                "max": 1.0,
+                "step": 0.02,
+                "mode": "slider",
+                "icon": "mdi:arrow-up-down",
+                "entity_category": "config",
+                **common,
+            },
+            "homeassistant/switch/spookyeyes_mirror_left/config": {
+                "name": "Mirror left panel",
+                "unique_id": "spookyeyes_mirror_left",
+                "command_topic": f"{base}/cmd/mirror_left",
+                "state_topic": f"{base}/state/mirror_left",
+                "icon": "mdi:flip-horizontal",
+                "entity_category": "config",
+                **common,
+            },
+            "homeassistant/switch/spookyeyes_mirror_right/config": {
+                "name": "Mirror right panel",
+                "unique_id": "spookyeyes_mirror_right",
+                "command_topic": f"{base}/cmd/mirror_right",
+                "state_topic": f"{base}/state/mirror_right",
+                "icon": "mdi:flip-horizontal",
+                "entity_category": "config",
+                **common,
+            },
+            "homeassistant/select/spookyeyes_default_theme/config": {
+                "name": "Default theme",
+                "unique_id": "spookyeyes_default_theme",
+                "command_topic": f"{base}/cmd/default_theme",
+                "state_topic": f"{base}/state/default_theme",
+                "options": self._theme_options,
+                "icon": "mdi:drama-masks",
+                "entity_category": "config",
                 **common,
             },
             "homeassistant/button/spookyeyes_blink/config": {

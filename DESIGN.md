@@ -9,7 +9,7 @@ authoritative for shared types; do not change their field names.
 
 ```
 inputs/mqtt.py ──┐                                        ┌─> outputs/fb.py      (/dev/fb1 + /dev/fb2, RGB565)
-inputs/pir.py ───┤→ queue.Queue[Event] → app.py main loop ├─> outputs/preview.py (pygame window, dev machine)
+                 ├→ queue.Queue[Event] → app.py main loop ├─> outputs/preview.py (pygame window, dev machine)
                  │        │                    │          ├─> outputs/record.py  (PNG frames / GIF)
                  │        v                    v          └─> outputs/null.py    (benchmarks)
                  │  behavior.BehaviorEngine  eye.EyeRenderer (x2, left+right)
@@ -72,7 +72,7 @@ theme.json) so all tests run without the real `themes/` assets.
 
 `BehaviorEngine(motion: MotionParams, rng: random.Random | None = None, presets=None)`
 - `step(dt: float) -> tuple[EyeState, EyeState]` — advance and return (left, right)
-- `handle(event: Event) -> None` — kinds: mode, brightness, blink, motion, look
+- `handle(event: Event) -> None` — kinds: mode, brightness, blink, look
 - `set_motion(motion: MotionParams) -> None` — on theme switch, keep pose
 - `mode` property -> Mode; `look` property -> option name; `look_xy` -> (x, y)
 - `look_presets(amplitude, doorbell_xy)` builds the name → (x, y) table from
@@ -86,10 +86,9 @@ State machine (all randomness through `self.rng` for testability):
   `flicker` multiplies brightness by `1 - flicker * |noise|` per tick.
 - Eye independence: right eye target = left target + `crazy`-scaled independent
   offset (clamped to valid range). `crazy=0` → identical.
-- **SCARE** (entered on `motion` when IDLE, or mode event): openness → 1.25 fast,
+- **SCARE** (mode event from HA): openness → 1.25 fast,
   pupil → 0.1 fast, gaze snaps to center-front then 2–3 rapid saccades; after
   ~6 s auto-return to IDLE. Re-triggering while active restarts the timer.
-  `motion` events are ignored in STARE/SLEEP and rate-limited by inputs anyway.
 - **STARE**: gaze eases to (0,0) + look offset and holds; blink interval x4.
 - **LOOK** (orthogonal to mode): `Event("look", name | (x, y))` saccades both
   eyes to the preset and holds; in IDLE the wander is paused until `center`;
@@ -125,7 +124,7 @@ queue (constructor arg `events: queue.Queue | None = None`); pump events each sh
 `--output {preview,fb,record,null}`, `--frames N` (exit after N frames, for tests
 and benchmarks), `--record-dir`, `--gif PATH`, `--fps N`, `--seed N` (deterministic
 behavior for tests/demos), `--verbose`. CLI overrides config. Wires config →
-theme load → renderers → behavior → inputs (mqtt/pir only if enabled; import
+theme load → renderers → behavior → inputs (mqtt only if enabled; import
 errors for optional deps produce a warning, not a crash) → output; runs the loop;
 logs measured FPS every 5 s (`logging`, INFO); SIGINT/SIGTERM → clean close.
 On `"theme"` event: `themes.load_theme`, rebuild both renderers,
@@ -147,25 +146,33 @@ v2 API (CallbackAPIVersion.VERSION2), lazy import so the package works without i
   - subscribe `base/cmd/look` (center|left|right|up|down|doorbell, or JSON
     `{"x","y"}` in -1..1) → Event("look", name | (x, y)); unknown payloads are
     dropped and the current state republished via `state_provider`
+  - subscribe `base/cmd/doorbell_x` / `doorbell_y` (float -1..1) →
+    Event("doorbell", {"x": v} | {"y": v}); the app merges it into the preset
+    (`engine.set_preset`), aims at it, saves `[settings] file`, publishes
+  - subscribe `base/cmd/mirror_left` / `mirror_right` (ON|OFF) →
+    Event("mirror", {"left": bool} | {"right": bool}); app flips frames, saves
+  - subscribe `base/cmd/default_theme` (must be an exposed theme) →
+    Event("default_theme", name); app saves it as the startup theme, publishes
   - publish retained availability `base/availability` = "online", LWT "offline"
-  - `publish_state(theme, mode, brightness, look="center")` publishes retained
-    `base/state/theme`, `base/state/mode`, `base/state/brightness`,
-    `base/state/look`
+  - `publish_state(theme, mode, brightness, look="center", doorbell=None,
+    mirror=None, default_theme=None)` publishes retained `base/state/theme`,
+    `base/state/mode`, `base/state/brightness`, `base/state/look`, and when
+    given `base/state/doorbell_x|y`, `base/state/mirror_left|right` (ON/OFF),
+    `base/state/default_theme`. `state_provider` returns the kwargs dict.
 - if `cfg.discovery`: on connect publish retained Home Assistant MQTT discovery
   configs under `homeassistant/select/spookyeyes_theme/config` (options
   human/demon/ghost), `homeassistant/select/spookyeyes_mode/config`,
   `homeassistant/select/spookyeyes_look/config` (options in model.LOOK_OPTIONS),
+  `homeassistant/number/spookyeyes_doorbell_x|y/config` (-1..1, entity_category
+  config), `homeassistant/switch/spookyeyes_mirror_left|right/config`,
+  `homeassistant/select/spookyeyes_default_theme/config` (same options as Theme,
+  which are `[theme] expose` or every theme on disk),
   `homeassistant/number/spookyeyes_brightness/config` (0..1 step 0.05),
   `homeassistant/button/spookyeyes_blink/config`, all sharing one device block
   (identifiers ["spookyeyes"], name "Spooky Eyes") with availability_topic set.
 - malformed payloads: log warning, drop. Never raise into paho callbacks.
-`inputs/pir.py`: `PirInput(cfg: PirConfig, events)` via gpiozero MotionSensor
-(lazy import; on non-Pi hosts construction raises `PirUnavailable` (define it) —
-the app treats that as a warning). `when_motion` → Event("motion") but only if
-`cooldown` has elapsed since the last forwarded event (time.monotonic).
 Tests: fake the paho client via injection (`MqttInput(..., client_factory=...)`)
-and test topic → Event mapping, discovery payload shape (json), cooldown logic of
-PirInput with a stubbed sensor class (`sensor_factory` injection).
+and test topic → Event mapping and discovery payload shape (json).
 
 ### tools/gen_art.py + themes/{human,demon,ghost}/ — agent ART
 
@@ -197,13 +204,13 @@ from notro/panel-mipi-dbi; cross-check RPi forum t=365153), `pi/build_firmware.s
 dc-gpio=25/reset-gpio=27, right: dc-gpio=24/reset-gpio=23), `pi/test_pattern.py`
 (standalone numpy → both /dev/fb*, distinct patterns), `pi/install.sh` (idempotent:
 apt python3-venv/git, venv at ~/spookyeyes-venv, pip install -e
-.[mqtt,pir], install+enable `pi/spookyeyes.service` running
+.[mqtt], install+enable `pi/spookyeyes.service` running
 `spookyeyes --config /home/<user>/spookyEyes/config.toml --output fb`),
-`pi/spookyeyes.service`, and a complete README.md (wiring tables incl. PIR, flash
+`pi/spookyeyes.service`, and a complete README.md (wiring tables, flash
 walkthrough, staged bring-up with the Blinka smoke test first, firmware build,
 config.txt, deploy via rsync, MQTT/HA usage incl. example automation YAML,
 troubleshooting from the research caveats: common ground, 40→32 MHz fallback,
-core_freq pinning, INVON/MADCTL tweaks, PIR-near-Pi false triggers).
+core_freq pinning, INVON/MADCTL tweaks).
 
 ## theme.json schema (authoritative example)
 

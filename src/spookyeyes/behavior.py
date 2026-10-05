@@ -9,8 +9,8 @@ Implements the DESIGN.md contract:
   then fires 2-3 rapid saccades; auto-returns to IDLE after ~6 s. Re-triggering
   restarts the timer.
 - STARE: gaze eases to (0, 0) and holds; blink interval x4.
-- SLEEP: lids ease closed; every ~10 s a small twitch; motion events ignored;
-  on leaving, the eyes reopen smoothly.
+- SLEEP: lids ease closed; every ~10 s a small twitch; on leaving, the eyes
+  reopen smoothly.
 - LOOK (orthogonal to mode): a named preset or raw (x, y) aims both eyes with
   a normal saccade and holds. In IDLE a held look pauses the wander; "center"
   resumes it. In STARE the look offset is the stare target. Entering SCARE or
@@ -185,6 +185,21 @@ class BehaviorEngine:
     def look_xy(self) -> Vec:
         return self._look_xy
 
+    def preset(self, name: str) -> Vec:
+        return self._presets[name]
+
+    def set_preset(self, name: str, xy: Vec) -> None:
+        """Recalibrate a named preset at runtime. If that preset is the
+        current look, the eyes re-aim to the new point (live tuning)."""
+        if name not in LOOK_OPTIONS or name == LOOK_CENTER:
+            raise ValueError(f"cannot recalibrate preset {name!r}")
+        parsed = self._parse_xy(xy)
+        if parsed is None:
+            raise ValueError(f"invalid preset coordinates {xy!r}")
+        self._presets[name] = parsed
+        if self._look == name:
+            self._apply_look(name, parsed)
+
     def set_motion(self, motion: MotionParams) -> None:
         """Swap animation tuning (theme switch) without disturbing the pose.
 
@@ -224,13 +239,6 @@ class BehaviorEngine:
             self._start_blink()
         elif kind == "look":
             self._handle_look(event.value)
-        elif kind == "motion":
-            if self._mode is Mode.IDLE:
-                self._transition(Mode.SCARE)
-            elif self._mode is Mode.SCARE:
-                self._enter_scare()  # restart the timer (and the drama)
-            else:
-                log.debug("motion ignored in mode %s", self._mode.value)
         else:
             log.debug("behavior ignoring event kind %r", kind)
 

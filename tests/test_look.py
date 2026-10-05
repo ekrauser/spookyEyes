@@ -124,14 +124,6 @@ def test_mode_change_to_scare_or_sleep_resets_look(mode: str) -> None:
     assert eng.look_xy == (0.0, 0.0)
 
 
-def test_pir_motion_scare_resets_look() -> None:
-    eng = make_engine()
-    eng.handle(Event("look", "left"))
-    eng.handle(Event("motion"))
-    assert eng.mode is Mode.SCARE
-    assert eng.look == "center"
-
-
 def test_scare_auto_return_leaves_look_centered() -> None:
     eng = make_engine()
     eng.handle(Event("look", "left"))
@@ -199,3 +191,38 @@ def test_look_is_deterministic() -> None:
         if i == 120:
             a.handle(Event("look", "center")); b.handle(Event("look", "center"))
         assert a.step(1 / 60) == b.step(1 / 60)
+
+
+# --- runtime calibration -------------------------------------------------------
+
+
+def test_set_preset_reaims_when_it_is_the_current_look() -> None:
+    eng = make_engine()
+    eng.handle(Event("look", "doorbell"))
+    run(eng, 1.0)
+    eng.set_preset("doorbell", (0.2, 0.4))
+    assert eng.preset("doorbell") == (0.2, 0.4)
+    left, right = run(eng, 2.0)
+    assert gaze(left) == (0.2, 0.4) and gaze(right) == (0.2, 0.4)
+    assert eng.look == "doorbell"
+
+
+def test_set_preset_does_not_move_other_looks() -> None:
+    eng = make_engine()
+    eng.handle(Event("look", "left"))
+    run(eng, 1.0)
+    eng.set_preset("doorbell", (0.9, 0.9))
+    left, _ = run(eng, 1.0)
+    assert gaze(left) == (-0.7, 0.0)
+
+
+def test_set_preset_clamps_and_rejects_bad_input() -> None:
+    eng = make_engine()
+    eng.set_preset("doorbell", (3.0, -3.0))
+    assert eng.preset("doorbell") == (1.0, -1.0)
+    with pytest.raises(ValueError):
+        eng.set_preset("center", (0.1, 0.1))
+    with pytest.raises(ValueError):
+        eng.set_preset("sideways", (0.1, 0.1))
+    with pytest.raises(ValueError):
+        eng.set_preset("doorbell", ("a", 0.0))

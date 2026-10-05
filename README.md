@@ -1,9 +1,10 @@
 # spookyeyes
 
 Two round 240x240 GC9A01A TFTs on a Raspberry Pi 3B+, animated as a pair of
-eyes that wander, blink, dilate — and snap wide open when a PIR sensor sees a
-trick-or-treater. Controlled over MQTT with Home Assistant auto-discovery.
-Three themes ship in `themes/`: `human`, `demon`, `ghost`.
+eyes that wander, blink, dilate — and snap wide open or stare down a
+trick-or-treater on command. Controlled over MQTT with Home Assistant
+auto-discovery; the scare triggers come from HA (doorbell, camera), not from a
+sensor on the Pi. Thirty themes ship in `themes/`.
 
 The displays are driven by the mainline `panel-mipi-dbi` kernel driver (a
 custom firmware blob carries the GC9A01 init sequence), so the app just writes
@@ -16,14 +17,13 @@ RGB565 frames to `/dev/fb1` and `/dev/fb2` — no userspace SPI bit-banging.
   each on an Adafruit EYESPI Breakout Board #5613 + EYESPI FPC cable — wire to
   the breakout's silkscreen labels; the display CS is labelled **TCS**. Plain
   pin-header GC9A01A modules work identically)
-- PIR motion sensor, 3.3 V-logic output (HC-SR501 or Adafruit PIR)
 - Micro SD card (8 GB+), 5 V / 2.5 A supply, jumper wires
 
 ## Wiring
 
 Both displays share the SPI0 bus (SCK + MOSI); each has its own chip select,
-D/C and reset. **All grounds must be common** — Pi and both panels (and the
-PIR), even if anything is powered separately. Missing common ground is the
+D/C and reset. **All grounds must be common** — Pi and both panels, even if
+anything is powered separately. Missing common ground is the
 number-one cause of "nothing works / garbage pixels".
 
 ### Displays (SPI0 harness)
@@ -41,18 +41,6 @@ number-one cause of "nothing works / garbage pixels".
 Leave **Lite** (backlight is on by default), **MISO**, **SDCS**, and **EYESPI
 connector pins 11–18** unconnected. The panels are written to only
 (`write-only` in the overlay), so MISO is never used.
-
-### PIR sensor
-
-| PIR pin | Pi                              |
-|---------|---------------------------------|
-| VCC     | 5V (phys 2)                     |
-| OUT     | GPIO17 (phys 11)                |
-| GND     | GND (phys 14)                   |
-
-HC-SR501 outputs 3.3 V despite 5 V supply — safe to connect directly. Mount
-the PIR at least ~30 cm from the Pi; the SoC's heat plume and WiFi bursts
-cause false triggers at point-blank range.
 
 ## Flash the SD card
 
@@ -197,13 +185,12 @@ bash pi/install.sh
 
 `install.sh` is idempotent (re-run it after every rsync): installs
 `python3-venv`/`git`, creates `~/spookyeyes-venv`, `pip install -e
-".[mqtt,pir]"`, creates `config.toml` from the example (with `output = "fb"`),
+".[mqtt]"`, creates `config.toml` from the example (with `output = "fb"`),
 and installs + enables `spookyeyes.service` (systemd, `Restart=always`,
 starts after network-online).
 
 Edit `~/spookyEyes/config.toml`: set `[mqtt] enabled = true` with your broker
-host/credentials, `[pir] enabled = true` if the sensor is wired, pick the
-`[theme]`. Then:
+host/credentials, pick the `[theme]`. Then:
 
 ```sh
 sudo systemctl start spookyeyes
@@ -243,10 +230,15 @@ Topics (base topic configurable, default `spookyeyes`):
 | `spookyeyes/state/mode`      | ← device  | retained, current mode                 |
 | `spookyeyes/state/brightness`| ← device  | retained, current brightness           |
 | `spookyeyes/state/look`      | ← device  | retained, current look option          |
+| `spookyeyes/cmd/doorbell_x`, `…/doorbell_y` | → device | float `-1`–`1`, recalibrate the doorbell preset |
+| `spookyeyes/state/doorbell_x`, `…/doorbell_y` | ← device | retained, current doorbell preset |
+| `spookyeyes/cmd/mirror_left`, `…/mirror_right` | → device | `ON` \| `OFF`, flip that panel horizontally |
+| `spookyeyes/state/mirror_left`, `…/mirror_right` | ← device | retained `ON` / `OFF` |
+| `spookyeyes/cmd/default_theme` | → device  | an exposed theme name; saved as the startup / resting theme |
+| `spookyeyes/state/default_theme` | ← device | retained, current default theme |
 | `spookyeyes/availability`    | ← device  | retained `online` / `offline` (LWT)    |
 
 `scare` runs the startle animation (~6 s) and returns to `idle` by itself.
-The PIR triggers the same thing locally, rate-limited by `[pir] cooldown`.
 
 `look` aims both pupils with a normal saccade and holds there until the next
 look; HA sends `center` to release. Directions are the visitor's (standing
@@ -258,10 +250,30 @@ look pauses the random wander; in `stare` the look is the stare target, so
 payload aims continuously; the state topic reports the nearest option name.
 Unknown payloads are ignored and the current state is republished.
 
+**Calibrating the doorbell aim from HA.** The device exposes *Doorbell X* and
+*Doorbell Y* sliders (under Configuration). Stand on the walkway, set Mode to
+`stare`, and drag the sliders until the eyes are on the button: each change
+re-aims the eyes immediately and is saved on the Pi to
+`[settings] file` (`settings.json` next to `config.toml`, gitignored), so it survives
+restarts and overrides `doorbell_x`/`doorbell_y` from the config. Set Look
+back to `center` when done.
+
+**Device settings from HA.** Under the device's Configuration section:
+*Default theme* is the theme the eyes start in and the one HA returns to
+outside Trick or Treat mode (the TorT automation reads it); *Mirror left/right
+panel* flip a panel horizontally for a mirrored mount; *Doorbell X/Y* as
+above. All of these are saved on the Pi in `[settings] file` (`settings.json`
+next to `config.toml`, gitignored) and override the config defaults at
+startup. The Theme and Default theme selects list `[theme] expose` (or every
+theme on disk when it is empty), so trimming the menu is a config edit plus a
+restart; hidden themes stay installed and still load if commanded.
+
 **Home Assistant:** with `[mqtt] discovery = true` (the default) and the MQTT
 integration set up in HA, a "Spooky Eyes" device appears automatically with
-`select` entities for theme, mode and look, a `number` for brightness, and a
-`button` for blink — nothing to configure. Availability tracks the service.
+`select` entities for theme, mode, look and default theme, `number`s for
+brightness and the doorbell X/Y calibration, `switch`es for the mirror flags,
+and a `button` for blink — nothing to configure. Availability tracks the
+service.
 
 Example automation — front-door motion triggers a scare during the evening:
 
@@ -282,6 +294,22 @@ actions:
       payload: scare
 mode: single
 ```
+
+## Operator access
+
+`pi/claude-ops-setup.sh` creates a scoped `claude-ops` account on the Pi for
+remote operations (deploy, restart, logs, config) without sharing the owner's
+login. Copy it over and run it as root with the operator's public key:
+
+```
+scp pi/claude-ops-setup.sh ladmin@spooky-pi1:/tmp/
+ssh -t ladmin@spooky-pi1 "sudo bash /tmp/claude-ops-setup.sh '<ssh public key>'"
+```
+
+The account may only start/stop/restart the service, run `git` and the
+editable `pip install` inside the repo and read/replace `config.toml` as the
+run user, and read the journal. Remove it with `sudo userdel -r claude-ops`
+and `sudo rm /etc/sudoers.d/claude-ops`.
 
 ## Troubleshooting
 
@@ -305,10 +333,6 @@ mode: single
   fallback in `pi/config.txt.snippet`, change **both** stanzas), pin the core
   clock (`core_freq=400` + `core_freq_min=400`, also in the snippet), shorten
   the SPI leads (< 15 cm ideally), and re-check the **common ground**.
-- **PIR fires constantly** — It is too close to the Pi (heat + WiFi):
-  relocate it, shield its underside, turn its sensitivity pot down, and raise
-  `[pir] cooldown` in config.toml. HC-SR501s also self-trigger for the first
-  ~60 s after power-on; that is normal.
 - **Low FPS** — Confirm the *kernel* driver is in use, not a userspace/spidev
   path: `dmesg | grep panel-mipi-dbi` must show both panels, and `/dev/spidev0.*`
   should **not** exist (if it does, a Stage-A SPI line — `dtparam=spi=on` or
