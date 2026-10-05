@@ -29,6 +29,14 @@ base_topic = "spookyeyes"
 discovery = true          # announce entities to Home Assistant via MQTT discovery
 client_id = "spookyeyes"
 
+[look]
+# Gaze presets for the Home Assistant "Look" select, in gaze units (-1..1 of
+# the theme's gaze_range_px). Directions are the visitor's: x > 0 is their
+# right (toward the doorbell), y > 0 is up. Tune doorbell_* from the walkway.
+amplitude = 0.7           # how far left/right/up/down aim
+doorbell_x = 0.7          # calibrated aim at the doorbell button
+doorbell_y = -0.3
+
 [pir]
 enabled = false
 pin = 17                  # BCM pin with the PIR OUT signal

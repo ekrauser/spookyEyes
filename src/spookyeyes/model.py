@@ -11,6 +11,11 @@ from enum import Enum
 
 SIZE = 240  # panel resolution: 240x240 (GC9A01A round TFT)
 
+# Named gaze presets exposed to Home Assistant as the "Look" select, in the
+# order HA shows them. Coordinates live in behavior.look_presets().
+LOOK_OPTIONS = ["center", "left", "right", "up", "down", "doorbell"]
+LOOK_CENTER = "center"
+
 
 class Mode(str, Enum):
     IDLE = "idle"    # autonomous wander / blink / dilation
@@ -41,6 +46,10 @@ class Event:
     "theme"     theme name string (handled by the app: reloads renderers + motion)
     "brightness" float 0..1
     "blink"     None (blink once now)
+    "look"      look option name ("center" | "left" | "right" | "up" | "down" |
+                "doorbell") or an (x, y) tuple in -1..1 for continuous aiming.
+                Directions are from the visitor's point of view (gaze_x > 0 =
+                visitor's right). Holds until the next look; "center" releases.
     "motion"    None (PIR edge; behavior decides whether to startle)
     "quit"      None (shut down cleanly)
     """

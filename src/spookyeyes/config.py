@@ -72,6 +72,16 @@ class MqttConfig:
 
 
 @dataclass
+class LookConfig:
+    """Gaze presets for the HA "Look" select. Gaze units: -1..1 of the theme's
+    gaze_range_px; x > 0 is the visitor's right, y > 0 is up."""
+
+    amplitude: float = 0.7        # how far left/right/up/down aim
+    doorbell_x: float = 0.7       # calibrated aim at the doorbell button
+    doorbell_y: float = -0.3
+
+
+@dataclass
 class PirConfig:
     enabled: bool = False
     pin: int = 17                 # BCM
@@ -83,6 +93,7 @@ class AppConfig:
     display: DisplayConfig = field(default_factory=DisplayConfig)
     theme: ThemeConfig = field(default_factory=ThemeConfig)
     mqtt: MqttConfig = field(default_factory=MqttConfig)
+    look: LookConfig = field(default_factory=LookConfig)
     pir: PirConfig = field(default_factory=PirConfig)
 
     @classmethod

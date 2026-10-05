@@ -238,17 +238,29 @@ Topics (base topic configurable, default `spookyeyes`):
 | `spookyeyes/cmd/mode`        | → device  | `idle` \| `scare` \| `stare` \| `sleep`|
 | `spookyeyes/cmd/brightness`  | → device  | float `0.0`–`1.0`                      |
 | `spookyeyes/cmd/blink`       | → device  | any payload → one blink                |
+| `spookyeyes/cmd/look`        | → device  | `center` \| `left` \| `right` \| `up` \| `down` \| `doorbell`, or `{"x": -1..1, "y": -1..1}` |
 | `spookyeyes/state/theme`     | ← device  | retained, current theme                |
 | `spookyeyes/state/mode`      | ← device  | retained, current mode                 |
 | `spookyeyes/state/brightness`| ← device  | retained, current brightness           |
+| `spookyeyes/state/look`      | ← device  | retained, current look option          |
 | `spookyeyes/availability`    | ← device  | retained `online` / `offline` (LWT)    |
 
 `scare` runs the startle animation (~6 s) and returns to `idle` by itself.
 The PIR triggers the same thing locally, rate-limited by `[pir] cooldown`.
 
+`look` aims both pupils with a normal saccade and holds there until the next
+look; HA sends `center` to release. Directions are the visitor's (standing
+outside facing the door: `right` is toward the doorbell). `doorbell` is a
+calibrated preset, tuned in `[look] doorbell_x/doorbell_y`. In `idle` a held
+look pauses the random wander; in `stare` the look is the stare target, so
+`stare` + `doorbell` is a hard stare at the button. Any change to `scare` or
+`sleep` resets the look to `center` and publishes it. A JSON `{"x", "y"}`
+payload aims continuously; the state topic reports the nearest option name.
+Unknown payloads are ignored and the current state is republished.
+
 **Home Assistant:** with `[mqtt] discovery = true` (the default) and the MQTT
 integration set up in HA, a "Spooky Eyes" device appears automatically with
-`select` entities for theme and mode, a `number` for brightness, and a
+`select` entities for theme, mode and look, a `number` for brightness, and a
 `button` for blink — nothing to configure. Availability tracks the service.
 
 Example automation — front-door motion triggers a scare during the evening:

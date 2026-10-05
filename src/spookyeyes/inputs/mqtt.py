@@ -16,7 +16,7 @@ import queue
 from typing import Any, Callable
 
 from ..config import MqttConfig
-from ..model import Event, Mode
+from ..model import LOOK_CENTER, LOOK_OPTIONS, Event, Mode
 
 log = logging.getLogger("spookyeyes.inputs.mqtt")
 
@@ -44,10 +44,11 @@ class MqttInput:
         self._client: Any | None = None
         self._theme_options = list(theme_options) if theme_options else list(THEME_OPTIONS)
         self._connect_failed_logged = False
-        # Optional callback returning (theme, mode, brightness); when set, the
-        # current state is (re)published on every connect so retained state
-        # topics reflect reality after restarts and broker reconnects.
-        self.state_provider: Callable[[], tuple[str, str, float]] | None = None
+        # Optional callback returning (theme, mode, brightness, look); when
+        # set, the current state is (re)published on every connect so retained
+        # state topics reflect reality after restarts and broker reconnects,
+        # and after a rejected command so HA's select snaps back.
+        self.state_provider: Callable[[], tuple[Any, ...]] | None = None
         base = cfg.base_topic
         self.availability_topic = f"{base}/availability"
         self._cmd_handlers: dict[str, Callable[[str], None]] = {
@@ -55,6 +56,7 @@ class MqttInput:
             f"{base}/cmd/mode": self._handle_mode,
             f"{base}/cmd/brightness": self._handle_brightness,
             f"{base}/cmd/blink": self._handle_blink,
+            f"{base}/cmd/look": self._handle_look,
         }
 
     # -- lifecycle ---------------------------------------------------------
@@ -133,12 +135,14 @@ class MqttInput:
             client.publish(self.availability_topic, "online", qos=0, retain=True)
             if self._cfg.discovery:
                 self._publish_discovery(client)
-            provider = self.state_provider
-            if provider is not None:
-                theme, mode, brightness = provider()
-                self.publish_state(theme, mode, brightness)
+            self._republish_state()
         except Exception:
             log.exception("mqtt: error in on_connect")
+
+    def _republish_state(self) -> None:
+        provider = self.state_provider
+        if provider is not None:
+            self.publish_state(*provider())
 
     def _on_connect_fail(self, client: Any, userdata: Any) -> None:
         # paho retries quietly forever; without this, an unreachable broker
@@ -200,9 +204,41 @@ class MqttInput:
     def _handle_blink(self, payload: str) -> None:
         self._events.put(Event("blink"))
 
+    def _handle_look(self, payload: str) -> None:
+        """Option name, or JSON {"x": -1..1, "y": -1..1} for continuous aiming.
+
+        Unknown payloads are ignored and the current state republished so the
+        HA select never shows an option the eyes did not take.
+        """
+        if payload.startswith("{"):
+            try:
+                obj = json.loads(payload)
+                x, y = float(obj["x"]), float(obj["y"])
+            except (ValueError, TypeError, KeyError):
+                log.warning("mqtt: invalid look JSON %r, dropped", payload)
+                self._republish_state()
+                return
+            if not (math.isfinite(x) and math.isfinite(y)):
+                log.warning("mqtt: non-finite look %r, dropped", payload)
+                self._republish_state()
+                return
+            self._events.put(
+                Event("look", (min(1.0, max(-1.0, x)), min(1.0, max(-1.0, y))))
+            )
+            return
+        name = payload.lower()
+        if name not in LOOK_OPTIONS:
+            log.warning("mqtt: invalid look %r, dropped (want one of %s)",
+                        payload, "|".join(LOOK_OPTIONS))
+            self._republish_state()
+            return
+        self._events.put(Event("look", name))
+
     # -- publishing (called from the app thread) ---------------------------
 
-    def publish_state(self, theme: str, mode: str, brightness: float) -> None:
+    def publish_state(
+        self, theme: str, mode: str, brightness: float, look: str = LOOK_CENTER
+    ) -> None:
         """Publish retained state so HA entities reflect reality after changes."""
         client = self._client
         if client is None:
@@ -214,6 +250,7 @@ class MqttInput:
             client.publish(f"{base}/state/mode", mode_str, qos=0, retain=True)
             client.publish(f"{base}/state/brightness", format(brightness, "g"),
                            qos=0, retain=True)
+            client.publish(f"{base}/state/look", str(look), qos=0, retain=True)
         except Exception:
             log.exception("mqtt: error publishing state")
 
@@ -248,6 +285,15 @@ class MqttInput:
                 "state_topic": f"{base}/state/mode",
                 "options": [m.value for m in Mode],
                 "icon": "mdi:eye-settings",
+                **common,
+            },
+            "homeassistant/select/spookyeyes_look/config": {
+                "name": "Look",
+                "unique_id": "spookyeyes_look",
+                "command_topic": f"{base}/cmd/look",
+                "state_topic": f"{base}/state/look",
+                "options": list(LOOK_OPTIONS),
+                "icon": "mdi:eye-arrow-right-outline",
                 **common,
             },
             "homeassistant/number/spookyeyes_brightness/config": {

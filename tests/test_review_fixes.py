@@ -168,12 +168,13 @@ def test_theme_options_default_unchanged():
 def test_state_provider_republished_on_connect():
     inp, client = _connected_input()
     client.published.clear()
-    inp.state_provider = lambda: ("demon", "idle", 0.5)
+    inp.state_provider = lambda: ("demon", "idle", 0.5, "right")
     client.on_connect(client, None, None, SimpleNamespace(is_failure=False))
     topics = {t: p for t, p, _q, _r in client.published}
     assert topics.get("spookyeyes/state/theme") == "demon"
     assert topics.get("spookyeyes/state/mode") == "idle"
     assert topics.get("spookyeyes/state/brightness") == "0.5"
+    assert topics.get("spookyeyes/state/look") == "right"
 
 
 def test_close_waits_for_offline_publish():
