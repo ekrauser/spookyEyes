@@ -6,3 +6,4 @@ __pycache__/
 *.egg-info/
 dist/
 out/
+look-calibration.json

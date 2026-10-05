@@ -243,6 +243,8 @@ Topics (base topic configurable, default `spookyeyes`):
 | `spookyeyes/state/mode`      | ← device  | retained, current mode                 |
 | `spookyeyes/state/brightness`| ← device  | retained, current brightness           |
 | `spookyeyes/state/look`      | ← device  | retained, current look option          |
+| `spookyeyes/cmd/doorbell_x`, `…/doorbell_y` | → device | float `-1`–`1`, recalibrate the doorbell preset |
+| `spookyeyes/state/doorbell_x`, `…/doorbell_y` | ← device | retained, current doorbell preset |
 | `spookyeyes/availability`    | ← device  | retained `online` / `offline` (LWT)    |
 
 `scare` runs the startle animation (~6 s) and returns to `idle` by itself.
@@ -258,10 +260,19 @@ look pauses the random wander; in `stare` the look is the stare target, so
 payload aims continuously; the state topic reports the nearest option name.
 Unknown payloads are ignored and the current state is republished.
 
+**Calibrating the doorbell aim from HA.** The device exposes *Doorbell X* and
+*Doorbell Y* sliders (under Configuration). Stand on the walkway, set Mode to
+`stare`, and drag the sliders until the eyes are on the button: each change
+re-aims the eyes immediately and is saved on the Pi to
+`[look] calibration_file` (next to `config.toml`, gitignored), so it survives
+restarts and overrides `doorbell_x`/`doorbell_y` from the config. Set Look
+back to `center` when done.
+
 **Home Assistant:** with `[mqtt] discovery = true` (the default) and the MQTT
 integration set up in HA, a "Spooky Eyes" device appears automatically with
-`select` entities for theme, mode and look, a `number` for brightness, and a
-`button` for blink — nothing to configure. Availability tracks the service.
+`select` entities for theme, mode and look, `number`s for brightness and the
+doorbell X/Y calibration, and a `button` for blink — nothing to configure.
+Availability tracks the service.
 
 Example automation — front-door motion triggers a scare during the evening:
 
@@ -282,6 +293,22 @@ actions:
       payload: scare
 mode: single
 ```
+
+## Operator access
+
+`pi/claude-ops-setup.sh` creates a scoped `claude-ops` account on the Pi for
+remote operations (deploy, restart, logs, config) without sharing the owner's
+login. Copy it over and run it as root with the operator's public key:
+
+```
+scp pi/claude-ops-setup.sh ladmin@spooky-pi1:/tmp/
+ssh -t ladmin@spooky-pi1 "sudo bash /tmp/claude-ops-setup.sh '<ssh public key>'"
+```
+
+The account may only start/stop/restart the service, run `git` and the
+editable `pip install` inside the repo and read/replace `config.toml` as the
+run user, and read the journal. Remove it with `sudo userdel -r claude-ops`
+and `sudo rm /etc/sudoers.d/claude-ops`.
 
 ## Troubleshooting
 

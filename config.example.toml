@@ -34,8 +34,11 @@ client_id = "spookyeyes"
 # the theme's gaze_range_px). Directions are the visitor's: x > 0 is their
 # right (toward the doorbell), y > 0 is up. Tune doorbell_* from the walkway.
 amplitude = 0.7           # how far left/right/up/down aim
-doorbell_x = 0.7          # calibrated aim at the doorbell button
+doorbell_x = 0.7          # default aim at the doorbell button
 doorbell_y = -0.3
+# The Doorbell X/Y sliders in Home Assistant save their values here (next to
+# this file) and override doorbell_x/doorbell_y at startup.
+calibration_file = "look-calibration.json"
 
 [pir]
 enabled = false

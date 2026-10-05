@@ -57,6 +57,8 @@ class MqttInput:
             f"{base}/cmd/brightness": self._handle_brightness,
             f"{base}/cmd/blink": self._handle_blink,
             f"{base}/cmd/look": self._handle_look,
+            f"{base}/cmd/doorbell_x": lambda p: self._handle_doorbell("x", p),
+            f"{base}/cmd/doorbell_y": lambda p: self._handle_doorbell("y", p),
         }
 
     # -- lifecycle ---------------------------------------------------------
@@ -234,10 +236,29 @@ class MqttInput:
             return
         self._events.put(Event("look", name))
 
+    def _handle_doorbell(self, axis: str, payload: str) -> None:
+        """Calibrate one axis of the doorbell preset (HA number slider)."""
+        try:
+            value = float(payload)
+        except ValueError:
+            log.warning("mqtt: invalid doorbell_%s %r, dropped", axis, payload)
+            self._republish_state()
+            return
+        if not math.isfinite(value):
+            log.warning("mqtt: non-finite doorbell_%s %r, dropped", axis, payload)
+            self._republish_state()
+            return
+        self._events.put(Event("doorbell", {axis: min(1.0, max(-1.0, value))}))
+
     # -- publishing (called from the app thread) ---------------------------
 
     def publish_state(
-        self, theme: str, mode: str, brightness: float, look: str = LOOK_CENTER
+        self,
+        theme: str,
+        mode: str,
+        brightness: float,
+        look: str = LOOK_CENTER,
+        doorbell: tuple[float, float] | None = None,
     ) -> None:
         """Publish retained state so HA entities reflect reality after changes."""
         client = self._client
@@ -251,6 +272,11 @@ class MqttInput:
             client.publish(f"{base}/state/brightness", format(brightness, "g"),
                            qos=0, retain=True)
             client.publish(f"{base}/state/look", str(look), qos=0, retain=True)
+            if doorbell is not None:
+                client.publish(f"{base}/state/doorbell_x", format(doorbell[0], "g"),
+                               qos=0, retain=True)
+                client.publish(f"{base}/state/doorbell_y", format(doorbell[1], "g"),
+                               qos=0, retain=True)
         except Exception:
             log.exception("mqtt: error publishing state")
 
@@ -306,6 +332,32 @@ class MqttInput:
                 "step": 0.05,
                 "mode": "slider",
                 "icon": "mdi:brightness-6",
+                **common,
+            },
+            "homeassistant/number/spookyeyes_doorbell_x/config": {
+                "name": "Doorbell X",
+                "unique_id": "spookyeyes_doorbell_x",
+                "command_topic": f"{base}/cmd/doorbell_x",
+                "state_topic": f"{base}/state/doorbell_x",
+                "min": -1.0,
+                "max": 1.0,
+                "step": 0.02,
+                "mode": "slider",
+                "icon": "mdi:arrow-left-right",
+                "entity_category": "config",
+                **common,
+            },
+            "homeassistant/number/spookyeyes_doorbell_y/config": {
+                "name": "Doorbell Y",
+                "unique_id": "spookyeyes_doorbell_y",
+                "command_topic": f"{base}/cmd/doorbell_y",
+                "state_topic": f"{base}/state/doorbell_y",
+                "min": -1.0,
+                "max": 1.0,
+                "step": 0.02,
+                "mode": "slider",
+                "icon": "mdi:arrow-up-down",
+                "entity_category": "config",
                 **common,
             },
             "homeassistant/button/spookyeyes_blink/config": {

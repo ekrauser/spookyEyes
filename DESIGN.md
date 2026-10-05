@@ -147,14 +147,20 @@ v2 API (CallbackAPIVersion.VERSION2), lazy import so the package works without i
   - subscribe `base/cmd/look` (center|left|right|up|down|doorbell, or JSON
     `{"x","y"}` in -1..1) → Event("look", name | (x, y)); unknown payloads are
     dropped and the current state republished via `state_provider`
+  - subscribe `base/cmd/doorbell_x` / `doorbell_y` (float -1..1) →
+    Event("doorbell", {"x": v} | {"y": v}); the app merges it into the preset
+    (`engine.set_preset`), aims at it, saves `[look] calibration_file`, publishes
   - publish retained availability `base/availability` = "online", LWT "offline"
-  - `publish_state(theme, mode, brightness, look="center")` publishes retained
-    `base/state/theme`, `base/state/mode`, `base/state/brightness`,
-    `base/state/look`
+  - `publish_state(theme, mode, brightness, look="center", doorbell=None)`
+    publishes retained `base/state/theme`, `base/state/mode`,
+    `base/state/brightness`, `base/state/look`, and when given
+    `base/state/doorbell_x` / `doorbell_y`
 - if `cfg.discovery`: on connect publish retained Home Assistant MQTT discovery
   configs under `homeassistant/select/spookyeyes_theme/config` (options
   human/demon/ghost), `homeassistant/select/spookyeyes_mode/config`,
   `homeassistant/select/spookyeyes_look/config` (options in model.LOOK_OPTIONS),
+  `homeassistant/number/spookyeyes_doorbell_x|y/config` (-1..1, entity_category
+  config),
   `homeassistant/number/spookyeyes_brightness/config` (0..1 step 0.05),
   `homeassistant/button/spookyeyes_blink/config`, all sharing one device block
   (identifiers ["spookyeyes"], name "Spooky Eyes") with availability_topic set.

@@ -185,6 +185,21 @@ class BehaviorEngine:
     def look_xy(self) -> Vec:
         return self._look_xy
 
+    def preset(self, name: str) -> Vec:
+        return self._presets[name]
+
+    def set_preset(self, name: str, xy: Vec) -> None:
+        """Recalibrate a named preset at runtime. If that preset is the
+        current look, the eyes re-aim to the new point (live tuning)."""
+        if name not in LOOK_OPTIONS or name == LOOK_CENTER:
+            raise ValueError(f"cannot recalibrate preset {name!r}")
+        parsed = self._parse_xy(xy)
+        if parsed is None:
+            raise ValueError(f"invalid preset coordinates {xy!r}")
+        self._presets[name] = parsed
+        if self._look == name:
+            self._apply_look(name, parsed)
+
     def set_motion(self, motion: MotionParams) -> None:
         """Swap animation tuning (theme switch) without disturbing the pose.
 

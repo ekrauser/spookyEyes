@@ -121,6 +121,8 @@ def test_on_connect_subscribes_all_cmd_topics(mqtt_setup):
         "spookyeyes/cmd/brightness",
         "spookyeyes/cmd/blink",
         "spookyeyes/cmd/look",
+        "spookyeyes/cmd/doorbell_x",
+        "spookyeyes/cmd/doorbell_y",
     }
 
 
@@ -257,6 +259,29 @@ def test_look_command_json_invalid_dropped(mqtt_setup, payload):
     assert ("spookyeyes/state/look", "center", 0, True) in fake.published
 
 
+@pytest.mark.parametrize("axis", ["x", "y"])
+def test_doorbell_calibration_command(mqtt_setup, axis):
+    _, events, fake, _ = mqtt_setup
+    fake.simulate_message(f"spookyeyes/cmd/doorbell_{axis}", b"0.42")
+    assert drain(events) == [Event("doorbell", {axis: 0.42})]
+
+
+def test_doorbell_calibration_clamped(mqtt_setup):
+    _, events, fake, _ = mqtt_setup
+    fake.simulate_message("spookyeyes/cmd/doorbell_x", b"-7")
+    assert drain(events) == [Event("doorbell", {"x": -1.0})]
+
+
+@pytest.mark.parametrize("payload", [b"", b"left", b"nan"])
+def test_doorbell_calibration_invalid_dropped(mqtt_setup, payload):
+    _, events, fake, inp = mqtt_setup
+    inp.state_provider = lambda: ("human", "idle", 1.0, "center", (0.7, -0.3))
+    fake.simulate_message("spookyeyes/cmd/doorbell_y", payload)
+    assert drain(events) == []
+    assert ("spookyeyes/state/doorbell_x", "0.7", 0, True) in fake.published
+    assert ("spookyeyes/state/doorbell_y", "-0.3", 0, True) in fake.published
+
+
 def test_non_utf8_payload_dropped_without_exception(mqtt_setup):
     _, events, fake, _ = mqtt_setup
     fake.simulate_message("spookyeyes/cmd/theme", b"\xff\xfe\x80")
@@ -278,6 +303,8 @@ DISCOVERY_TOPICS = {
     "homeassistant/select/spookyeyes_mode/config",
     "homeassistant/select/spookyeyes_look/config",
     "homeassistant/number/spookyeyes_brightness/config",
+    "homeassistant/number/spookyeyes_doorbell_x/config",
+    "homeassistant/number/spookyeyes_doorbell_y/config",
     "homeassistant/button/spookyeyes_blink/config",
 }
 
@@ -308,7 +335,7 @@ def test_discovery_common_keys_and_device_block(mqtt_setup):
         assert payload["device"]["identifiers"] == ["spookyeyes"], topic
         assert payload["device"]["name"] == "Spooky Eyes", topic
         unique_ids.add(payload["unique_id"])
-    assert len(unique_ids) == 5, "unique_id must differ per entity"
+    assert len(unique_ids) == 7, "unique_id must differ per entity"
 
 
 def test_discovery_entity_specifics(mqtt_setup):
@@ -328,6 +355,12 @@ def test_discovery_entity_specifics(mqtt_setup):
     assert look["state_topic"] == "spookyeyes/state/look"
     assert look["options"] == ["center", "left", "right", "up", "down", "doorbell"]
     assert look["icon"] == "mdi:eye-arrow-right-outline"
+    for axis in ("x", "y"):
+        n = payloads[f"homeassistant/number/spookyeyes_doorbell_{axis}/config"]
+        assert n["command_topic"] == f"spookyeyes/cmd/doorbell_{axis}"
+        assert n["state_topic"] == f"spookyeyes/state/doorbell_{axis}"
+        assert (n["min"], n["max"]) == (-1.0, 1.0)
+        assert n["entity_category"] == "config"
     number = payloads["homeassistant/number/spookyeyes_brightness/config"]
     assert number["min"] == 0.0
     assert number["max"] == 1.0
@@ -344,7 +377,7 @@ def test_discovery_disabled():
     fake.simulate_connect()
     assert discovery_payloads(fake) == {}
     # availability + subscriptions still happen
-    assert len(fake.subscriptions) == 5
+    assert len(fake.subscriptions) == 7
     assert ("spookyeyes/availability", "online", 0, True) in fake.published
 
 
@@ -362,6 +395,13 @@ def test_publish_state_four_retained_topics(mqtt_setup):
         ("spookyeyes/state/brightness", "0.75", 0, True),
         ("spookyeyes/state/look", "doorbell", 0, True),
     ]
+
+
+def test_publish_state_doorbell_topics(mqtt_setup):
+    _, _, fake, inp = mqtt_setup
+    inp.publish_state("ghost", "idle", 1.0, "center", (0.5, -0.25))
+    assert ("spookyeyes/state/doorbell_x", "0.5", 0, True) in fake.published
+    assert ("spookyeyes/state/doorbell_y", "-0.25", 0, True) in fake.published
 
 
 def test_publish_state_look_defaults_to_center(mqtt_setup):

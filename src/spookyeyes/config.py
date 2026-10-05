@@ -77,8 +77,12 @@ class LookConfig:
     gaze_range_px; x > 0 is the visitor's right, y > 0 is up."""
 
     amplitude: float = 0.7        # how far left/right/up/down aim
-    doorbell_x: float = 0.7       # calibrated aim at the doorbell button
+    doorbell_x: float = 0.7       # default aim at the doorbell button
     doorbell_y: float = -0.3
+    # Values calibrated from Home Assistant (Doorbell X/Y sliders) are saved
+    # here and override doorbell_x/doorbell_y at startup. Relative paths are
+    # resolved against the config file's directory.
+    calibration_file: str = "look-calibration.json"
 
 
 @dataclass

@@ -10,6 +10,7 @@ rest to the behavior engine.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import queue
 import random
@@ -107,6 +108,41 @@ def _list_themes(themes_dir: Path) -> list[str]:
         return []
 
 
+def _calibration_path(cfg: AppConfig, config_path: str | None) -> Path:
+    p = Path(cfg.look.calibration_file)
+    if not p.is_absolute() and config_path:
+        p = Path(config_path).resolve().parent / p
+    return p
+
+
+def _load_calibration(path: Path, default: tuple[float, float]) -> tuple[float, float]:
+    """Doorbell (x, y) saved from HA, falling back to the config defaults."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        d = data["doorbell"]
+        x, y = float(d["x"]), float(d["y"])
+    except FileNotFoundError:
+        return default
+    except (OSError, ValueError, TypeError, KeyError) as e:
+        log.warning("ignoring unreadable calibration file %s: %s", path, e)
+        return default
+    return (min(1.0, max(-1.0, x)), min(1.0, max(-1.0, y)))
+
+
+def _save_calibration(path: Path, doorbell: tuple[float, float]) -> None:
+    """Atomic write; a failure is logged, the live value still applies."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(
+            json.dumps({"doorbell": {"x": doorbell[0], "y": doorbell[1]}}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        tmp.replace(path)
+    except OSError as e:
+        log.warning("cannot save calibration to %s: %s", path, e)
+
+
 def _start_pir(cfg: PirConfig, events: queue.Queue[Event]) -> object | None:
     """Start the PIR input if enabled. Missing gpiozero or a non-Pi host
     (PirUnavailable) is a warning, never a crash."""
@@ -181,9 +217,9 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
 
     left_renderer, right_renderer = _make_renderers(theme)
     rng = random.Random(args.seed)  # Random(None) seeds from the OS
-    presets = behavior_mod.look_presets(
-        cfg.look.amplitude, (cfg.look.doorbell_x, cfg.look.doorbell_y)
-    )
+    calib_path = _calibration_path(cfg, args.config)
+    doorbell = _load_calibration(calib_path, (cfg.look.doorbell_x, cfg.look.doorbell_y))
+    presets = behavior_mod.look_presets(cfg.look.amplitude, doorbell)
     engine = behavior_mod.BehaviorEngine(theme.motion, rng=rng, presets=presets)
 
     if events is None:
@@ -206,7 +242,8 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
             return
         try:
             mqtt_input.publish_state(
-                theme_name, _current_mode_str(), brightness, _current_look()
+                theme_name, _current_mode_str(), brightness, _current_look(),
+                engine.preset("doorbell"),
             )
         except Exception:
             log.warning("mqtt publish_state failed", exc_info=True)
@@ -215,7 +252,8 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
         # Republished on every (re)connect so retained state survives restarts,
         # and after a rejected command so HA's selects snap back.
         mqtt_input.state_provider = lambda: (
-            theme_name, _current_mode_str(), brightness, _current_look()
+            theme_name, _current_mode_str(), brightness, _current_look(),
+            engine.preset("doorbell"),
         )
 
     output: Output | None = None
@@ -293,6 +331,21 @@ def main(argv: list[str] | None = None, events: queue.Queue[Event] | None = None
                     left_renderer, right_renderer = _make_renderers(theme)
                     engine.set_motion(theme.motion)
                     log.info("switched to theme %r", theme_name)
+                    _publish_state()
+                elif ev.kind == "doorbell":
+                    # Calibration from HA: merge the axis into the preset,
+                    # aim at it so the tuner sees the result, persist.
+                    try:
+                        x, y = engine.preset("doorbell")
+                        upd = dict(ev.value)  # type: ignore[arg-type]
+                        new_xy = (float(upd.get("x", x)), float(upd.get("y", y)))
+                        engine.set_preset("doorbell", new_xy)
+                        engine.handle(Event("look", "doorbell"))
+                    except (TypeError, ValueError, AttributeError) as e:
+                        log.warning("ignoring bad doorbell calibration %r: %s", ev.value, e)
+                        continue
+                    _save_calibration(calib_path, engine.preset("doorbell"))
+                    log.info("doorbell preset calibrated to x=%.2f y=%.2f", *new_xy)
                     _publish_state()
                 else:
                     try:

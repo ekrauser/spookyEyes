@@ -280,3 +280,41 @@ def test_main_publishes_look_state_and_scare_reset(theme_setup, tmp_path, monkey
     assert looks.index("doorbell") < len(looks) - 1
     modes = [p for t, p in published if t == "spookyeyes/state/mode"]
     assert modes[-1] == "scare"
+
+
+def test_main_doorbell_calibration_persists_and_reloads(theme_setup, tmp_path) -> None:
+    """A doorbell calibration event aims at the new point, writes the sidecar
+    file next to config.toml, and a fresh start reads it back."""
+    from spookyeyes import app
+
+    calib = theme_setup.parent / "look-calibration.json"
+    assert not calib.exists()
+
+    events: queue.Queue = queue.Queue()
+    events.put(Event("doorbell", {"x": 0.55}))
+    events.put(Event("doorbell", {"y": -0.15}))
+    rc = app.main(
+        ["--config", str(theme_setup), "--output", "null", "--frames", "3", "--seed", "1", "--fps", "120"],
+        events=events,
+    )
+    assert rc == 0
+    assert json.loads(calib.read_text()) == {"doorbell": {"x": 0.55, "y": -0.15}}
+
+    # second start: the saved value overrides the config default (0.7, -0.3)
+    from spookyeyes.config import AppConfig
+
+    cfg = AppConfig.load(str(theme_setup))
+    path = app._calibration_path(cfg, str(theme_setup))
+    assert path == calib
+    assert app._load_calibration(path, (0.7, -0.3)) == (0.55, -0.15)
+
+
+def test_load_calibration_falls_back_on_garbage(tmp_path) -> None:
+    from spookyeyes import app
+
+    p = tmp_path / "c.json"
+    assert app._load_calibration(p, (0.7, -0.3)) == (0.7, -0.3)  # missing
+    p.write_text("not json")
+    assert app._load_calibration(p, (0.7, -0.3)) == (0.7, -0.3)
+    p.write_text(json.dumps({"doorbell": {"x": 9, "y": -9}}))
+    assert app._load_calibration(p, (0.7, -0.3)) == (1.0, -1.0)  # clamped

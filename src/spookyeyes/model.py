@@ -50,6 +50,8 @@ class Event:
                 "doorbell") or an (x, y) tuple in -1..1 for continuous aiming.
                 Directions are from the visitor's point of view (gaze_x > 0 =
                 visitor's right). Holds until the next look; "center" releases.
+    "doorbell"  {"x": float} and/or {"y": float}: recalibrate the doorbell
+                preset (handled by the app: persists, re-aims, publishes)
     "motion"    None (PIR edge; behavior decides whether to startle)
     "quit"      None (shut down cleanly)
     """
