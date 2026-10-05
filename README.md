@@ -4,7 +4,7 @@ Two round 240x240 GC9A01A TFTs on a Raspberry Pi 3B+, animated as a pair of
 eyes that wander, blink, dilate — and snap wide open or stare down a
 trick-or-treater on command. Controlled over MQTT with Home Assistant
 auto-discovery; the scare triggers come from HA (doorbell, camera), not from a
-sensor on the Pi. Thirty themes ship in `themes/`.
+sensor on the Pi. A fleet of procedurally generated themes ships in `themes/`.
 
 The displays are driven by the mainline `panel-mipi-dbi` kernel driver (a
 custom firmware blob carries the GC9A01 init sequence), so the app just writes
