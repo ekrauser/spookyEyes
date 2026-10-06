@@ -143,7 +143,7 @@ Edit `/boot/firmware/config.txt`: **remove the `dtoverlay=spi0-0cs` line**
 added in Stage A (and any `dtparam=spi=on`), and append the contents of
 `pi/config.txt.snippet` (two
 `mipi-dbi-spi` stanzas: left eye on CE0 with DC=25/RST=27, right on CE1 with
-DC=24/RST=23, 40 MHz, write-only). Then:
+DC=24/RST=23, 32 MHz, write-only, core clock pinned). Then:
 
 ```sh
 sudo reboot
@@ -329,10 +329,13 @@ and `sudo rm /etc/sudoers.d/claude-ops`.
   `pi/test_pattern.py` force one automatically on open
   (FBIOPUT_VSCREENINFO + FB_ACTIVATE_FORCE); if you write to `/dev/fbN` with
   other tools, they must do the same.
-- **Glitches / tearing / random pixels** — Drop SPI to 32 MHz (commented
-  fallback in `pi/config.txt.snippet`, change **both** stanzas), pin the core
-  clock (`core_freq=400` + `core_freq_min=400`, also in the snippet), shorten
-  the SPI leads (< 15 cm ideally), and re-check the **common ground**.
+- **Glitches / tearing / random pixels** — The snippet already runs SPI at
+  32 MHz with the core clock pinned (`core_freq=400` + `core_freq_min=400`);
+  if an older install still says `speed=40000000`, change **both** stanzas.
+  Then shorten the SPI leads (< 15 cm ideally), reseat the EYESPI ribbons at
+  both ends and strain-relieve them, and re-check the **common ground**. A
+  marginal ribbon shows as the eyes scrambling when the housing is knocked
+  (2026-10-05); static or solid white means a panel lost its reset or power.
 - **Low FPS** — Confirm the *kernel* driver is in use, not a userspace/spidev
   path: `dmesg | grep panel-mipi-dbi` must show both panels, and `/dev/spidev0.*`
   should **not** exist (if it does, a Stage-A SPI line — `dtparam=spi=on` or

@@ -9,26 +9,26 @@
 # `compatible=gc9a01\0...` below is what makes the driver load that file.
 
 # --- Left eye: SPI0 CE0 (GPIO8), DC=GPIO25, RST=GPIO27 → /dev/fb1 ---
-dtoverlay=mipi-dbi-spi,spi0-0,speed=40000000
+dtoverlay=mipi-dbi-spi,spi0-0,speed=32000000
 dtparam=compatible=gc9a01\0panel-mipi-dbi-spi
 dtparam=write-only
 dtparam=width=240,height=240
 dtparam=dc-gpio=25,reset-gpio=27
 
 # --- Right eye: SPI0 CE1 (GPIO7), DC=GPIO24, RST=GPIO23 → /dev/fb2 ---
-dtoverlay=mipi-dbi-spi,spi0-1,speed=40000000
+dtoverlay=mipi-dbi-spi,spi0-1,speed=32000000
 dtparam=compatible=gc9a01\0panel-mipi-dbi-spi
 dtparam=write-only
 dtparam=width=240,height=240
 dtparam=dc-gpio=24,reset-gpio=23
 
-# Glitches / tearing / white screen at 40 MHz (long jumper leads)? Fall back to
-# 32 MHz: replace `speed=40000000` with `speed=32000000` in BOTH dtoverlay
-# lines above, i.e.:
-# dtoverlay=mipi-dbi-spi,spi0-0,speed=32000000
-# dtoverlay=mipi-dbi-spi,spi0-1,speed=32000000
+# SPI runs at 32 MHz, not the 40 MHz the panels can take. The prop lives in a
+# door with ribbon cables and a friction-fit back; 40 MHz worked on the bench
+# and glitched in place (2026-10-05: a knock on the housing scrambled both
+# eyes). 32 MHz costs a few fps of panel refresh and buys margin. Raise it
+# only with short, strain-relieved leads.
 
-# Optional: pin the core clock so the SPI clock doesn't wobble with governor
-# frequency scaling (helps marginal wiring):
-# core_freq=400
-# core_freq_min=400
+# The core clock is pinned so the SPI clock does not wobble with governor
+# frequency scaling (the SPI clock is derived from it on the 3B+).
+core_freq=400
+core_freq_min=400
